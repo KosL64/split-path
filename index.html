@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Split Path</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <main id="app">
+    <section id="title-screen" class="screen active">
+      <div class="hero-art" aria-hidden="true">
+        <div class="sigil"></div>
+        <div class="king-shadow"></div>
+        <div class="tiny-cube"></div>
+      </div>
+      <div class="title-panel">
+        <p class="eyebrow">Phase One Prototype</p>
+        <h1>Split Path</h1>
+        <p>Restore the land. Reclaim the crown. Choose your path.</p>
+        <button id="play-button" class="primary-button">Play</button>
+      </div>
+    </section>
+
+    <section id="story-screen" class="screen" aria-label="Story introduction">
+      <div class="story-shell">
+        <article id="story-slide" class="story-slide"></article>
+        <div id="story-progress" class="story-progress" aria-label="Story progress"></div>
+        <div class="story-controls">
+          <button id="story-prev">Previous</button>
+          <button id="story-next" class="primary-button">Next</button>
+          <button id="story-skip">Skip Story</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="game-screen" class="screen">
+      <div id="hud">
+        <div class="hud-group">
+          <span id="divine-points">DP: 0</span>
+          <span id="player-stats">Power 3 | Guard 0 | Health 20</span>
+        </div>
+        <div class="hud-group">
+          <button id="upgrade-button">Divine Path</button>
+          <button id="reset-button">Reset</button>
+        </div>
+      </div>
+
+      <div class="canvas-wrap">
+        <canvas id="game-canvas" width="960" height="540" aria-label="Split Path game world"></canvas>
+        <div id="interaction-prompt" class="hidden">Press E to Restore</div>
+      </div>
+
+      <p class="control-strip">Move: A/D or Arrows | Jump: W, Up, or Space | Interact: E | Divine Path: U | Pause: Esc</p>
+    </section>
+
+    <section id="battle-screen" class="screen">
+      <div class="battle-panel">
+        <div class="battle-stage" aria-hidden="true">
+          <div id="battle-player" class="battle-cube player-cube"></div>
+          <div class="battle-beam"></div>
+          <div id="battle-enemy" class="battle-cube enemy-cube"></div>
+        </div>
+
+        <div class="battle-stats">
+          <label>
+            Player Health
+            <meter id="player-health-meter" min="0" max="20" value="20"></meter>
+            <span id="player-health">20 / 20</span>
+          </label>
+          <label>
+            Enemy Control
+            <meter id="enemy-control-meter" min="0" max="12" value="12"></meter>
+            <span id="enemy-control">12</span>
+          </label>
+        </div>
+
+        <p id="battle-message">A controlled cube blocks the path.</p>
+
+        <div class="battle-actions">
+          <button id="restore-action" class="primary-button">Restore</button>
+          <button id="guard-action">Guard</button>
+          <button id="focus-action">Focus</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="upgrade-screen" class="screen">
+      <div class="upgrade-panel">
+        <div class="upgrade-header">
+          <p class="eyebrow">Spend Divine Points</p>
+          <h2>Divine Path</h2>
+          <p id="upgrade-points">DP: 0</p>
+        </div>
+
+        <div class="path-map" aria-hidden="true">
+          <span>Basic</span>
+          <i></i><i></i><i></i>
+        </div>
+
+        <div class="upgrade-grid">
+          <button data-upgrade="damage">
+            <strong>Damage</strong>
+            <span>Radiant Force I</span>
+            <small>Restore power +1. Cost: 5 DP</small>
+          </button>
+          <button data-upgrade="defense">
+            <strong>Defense</strong>
+            <span>Pristine Guard I</span>
+            <small>Incoming damage -1. Cost: 5 DP</small>
+          </button>
+          <button data-upgrade="health">
+            <strong>Health</strong>
+            <span>Soul Light I</span>
+            <small>Maximum health +5. Cost: 5 DP</small>
+          </button>
+        </div>
+
+        <p id="upgrade-message">Restore controlled cubes to earn points.</p>
+        <button id="close-upgrades" class="primary-button">Return</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="js/game.js"></script>
+</body>
+</html>
