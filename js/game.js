@@ -41,7 +41,9 @@ function movePlayer() {
   if (keys.has("arrowup") || keys.has("w")) vertical -= 1;
   if (keys.has("arrowdown") || keys.has("s")) vertical += 1;
   if (horizontal && vertical) { horizontal *= 0.707; vertical *= 0.707; }
-  if (horizontal) player.facing = horizontal > 0 ? 1 : -1;`r`n  if (vertical < 0) player.view = "back";`r`n  else if (horizontal || vertical > 0) player.view = "front";
+  if (horizontal) player.facing = horizontal > 0 ? 1 : -1;
+  if (vertical < 0) player.view = "back";
+  else if (horizontal || vertical > 0) player.view = "front";
   player.x = Math.max(0, Math.min(config.worldWidth - player.width, player.x + horizontal * config.moveSpeed));
   player.y = Math.max(200, Math.min(432 - player.height, player.y + vertical * config.moveSpeed));
   world.cameraX = Math.max(0, Math.min(config.worldWidth - canvas.width, player.x - canvas.width * 0.42));
