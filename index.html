@@ -48,10 +48,10 @@
 
       <div class="canvas-wrap">
         <canvas id="game-canvas" width="960" height="540" aria-label="Split Path game world"></canvas>
-        <div id="interaction-prompt" class="hidden">Press E to Restore</div>
+        <div id="interaction-prompt" class="hidden"></div>
       </div>
 
-      <p class="control-strip">Move: A/D or Arrows | Jump: W, Up, or Space | Interact: E | Divine Path: U | Pause: Esc</p>
+      <p class="control-strip">Move: WASD or Arrows | Talk: Z (near a restored cube) | Divine Path: U | Pause: Esc</p>
     </section>
 
     <section id="battle-screen" class="screen">
@@ -78,9 +78,9 @@
         <p id="battle-message">A controlled cube blocks the path.</p>
 
         <div class="battle-actions">
-          <button id="restore-action" class="primary-button">Restore</button>
-          <button id="guard-action">Guard</button>
-          <button id="focus-action">Focus</button>
+          <button id="attack-action" class="primary-button">Attack</button>
+          <button id="defend-action">Defend</button>
+          <button id="heal-action">Heal</button>
         </div>
       </div>
     </section>
