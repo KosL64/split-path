@@ -20,6 +20,12 @@ const config = {
   contactCooldown: 900
 };
 
+const areaEnemyGoals = {
+  sylvan: 20,
+  azureApex: 31,
+  controlledPlains: 55
+};
+
 const playerState = {
   divinePoints: 0,
   health: 20,
@@ -32,8 +38,8 @@ const playerState = {
 const player = {
   x: 140,
   y: 240,
-  width: 36,
-  height: 42,
+  width: 58,
+  height: 78,
   facing: 1,
   view: "front"
 };
@@ -41,7 +47,7 @@ const player = {
 const keys = new Set();
 let currentScreen = "title";
 let gameMode = "kingdom";
-let currentAreaId = "clearing";
+let currentAreaId = "sylvan";
 let storyIndex = 0;
 let lastTime = 0;
 let animationFrameId = null;
@@ -58,7 +64,7 @@ const storySlides = [
   { title: "The King", text: "Long ago, the Pristine King watched over the cubes and souls of the land.", image: "img/split-path-lore.png" },
   { title: "The Takeover", text: "A mysterious figure appeared. One by one, cubes across the kingdom fell under its control.", image: "img/split-path-1.jpg" },
   { title: "Reborn", text: "The king's power was taken, and he awakened again in a new form.", image: "img/split-path-1.jpg" },
-  { title: "Divine Points", text: "By restoring controlled creatures, the king earns Divine Points: chips of light created through good deeds.", image: "New folder/NOT DWIN POINTS!!!.png" },
+  { title: "Divine Points", text: "By restoring controlled creatures, the king earns Divine Points: chips of light created through good deeds.", image: "notes/NOT DWIN POINTS!!!.png" },
   { title: "The Split Path", text: "Every point brings him closer to his former power, but the path back can split in many directions.", image: "img/split-path-2.jpg" }
 ];
 
@@ -74,26 +80,24 @@ const kingdomMap = {
     [[1010, 690], [1190, 820], [1440, 760]]
   ],
   nodes: [
-    { id: "clearing", name: "Pristine Clearing", x: 180, y: 520, areaId: "clearing", unlocked: true },
-    { id: "ruins", name: "Old Ruins", x: 620, y: 390, areaId: "ruins", unlocked: false },
-    { id: "village", name: "Quiet Village", x: 1010, y: 690, areaId: "village", unlocked: false },
-    { id: "tower", name: "Shadow Tower", x: 1430, y: 500, areaId: "tower", unlocked: false },
-    { id: "grove", name: "Soul Grove", x: 1440, y: 760, areaId: "grove", unlocked: false }
+    { id: "sylvan", name: "Sylvan", x: 180, y: 520, areaId: "sylvan", unlocked: true, kind: "area" },
+    { id: "azureApex", name: "Azure Apex", x: 620, y: 390, areaId: "azureApex", unlocked: true, kind: "area" },
+    { id: "sylvanVillage", name: "Sylvan Village", x: 1010, y: 690, areaId: "sylvanVillage", unlocked: false, kind: "village", unlocksAfter: "sylvan" },
+    { id: "controlledPalace", name: "Controlled Palace", x: 1430, y: 500, areaId: "controlledPalace", unlocked: true, kind: "area" },
+    { id: "controlledPlains", name: "Controlled Plains", x: 1440, y: 760, areaId: "controlledPlains", unlocked: true, kind: "area" }
   ]
 };
 
 const areas = {
-  clearing: {
-    name: "Pristine Clearing",
+  sylvan: {
+    name: "Sylvan",
     width: 36,
     height: 26,
     start: { x: 4, y: 12 },
     cameraX: 0,
     cameraY: 0,
     healed: false,
-    enemies: [
-      { id: "first-cube", x: 16 * 48, y: 12 * 48, width: 34, height: 38, restored: false, controlMax: 12, control: 12 }
-    ],
+    enemies: [],
     map: [
       "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
       "^TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT^",
@@ -123,13 +127,13 @@ const areas = {
       "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
     ]
   },
-  ruins: makePreviewArea("Old Ruins"),
-  village: makePreviewArea("Quiet Village"),
-  tower: makePreviewArea("Shadow Tower"),
-  grove: makePreviewArea("Soul Grove")
+  azureApex: makePreviewArea("Azure Apex", true),
+  sylvanVillage: makePreviewArea("Sylvan Village", false),
+  controlledPalace: makePreviewArea("Controlled Palace", false),
+  controlledPlains: makePreviewArea("Controlled Plains", true)
 };
 
-function makePreviewArea(name) {
+function makePreviewArea(name, hasEnemies) {
   return {
     name,
     width: 30,
@@ -139,6 +143,7 @@ function makePreviewArea(name) {
     cameraY: 0,
     healed: false,
     enemies: [],
+    hasEnemies,
     map: [
       "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
       "^TTTTTTTTTTTTTTTTTTTTTTTTTTTT^",
@@ -162,6 +167,67 @@ function makePreviewArea(name) {
       "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
     ]
   };
+}
+
+initializeAreaEnemies();
+
+function initializeAreaEnemies() {
+  Object.entries(areaEnemyGoals).forEach(([areaId, count]) => {
+    const area = areas[areaId];
+    if (!area) return;
+    area.enemies = createEnemiesForArea(area, count, areaId);
+  });
+}
+
+function createEnemiesForArea(area, count, seedText) {
+  const positions = collectEnemySpawnTiles(area);
+  const marked = positions.filter((position) => position.tile === "C");
+  const shuffled = seededShuffle(positions.filter((position) => position.tile !== "C"), seedFromText(seedText));
+  const orderedPositions = [...marked, ...shuffled];
+
+  return orderedPositions.slice(0, count).map((position, index) => ({
+    id: `${seedText}-cube-${index + 1}`,
+    x: position.x * config.tileSize + 7,
+    y: position.y * config.tileSize + 5,
+    width: 34,
+    height: 38,
+    restored: false,
+    controlMax: 12,
+    control: 12
+  }));
+}
+
+function collectEnemySpawnTiles(area) {
+  const preferred = [];
+  const fallback = [];
+
+  area.map.forEach((row, y) => {
+    [...row].forEach((tile, x) => {
+      const distanceFromStart = Math.hypot(x - area.start.x, y - area.start.y);
+      if (distanceFromStart < 4 || tile === "E" || isBlockedTile(tile)) return;
+      if (tile === "C" || tile === "g") preferred.push({ x, y, tile });
+      else if (tile === ".") fallback.push({ x, y, tile });
+    });
+  });
+
+  return [...preferred, ...fallback];
+}
+
+function seededShuffle(items, seed) {
+  const shuffled = [...items];
+  let state = seed;
+
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    const swapIndex = state % (index + 1);
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+
+  return shuffled;
+}
+
+function seedFromText(text) {
+  return [...text].reduce((total, letter) => total + letter.charCodeAt(0) * 17, 97);
 }
 
 function showScreen(name) {
@@ -500,8 +566,11 @@ function finishRestoration() {
   window.clearTimeout(battleTimer);
   activeEnemy.restored = true;
   playerState.divinePoints += config.restoreReward;
-  unlockKingdomNode("ruins");
-  areas[currentAreaId].healed = true;
+  const area = areas[currentAreaId];
+  const remainingEnemies = area.enemies.filter((enemy) => !enemy.restored).length;
+  const areaCleared = area.enemies.length > 0 && remainingEnemies === 0;
+  area.healed = areaCleared;
+  updateVillageLocks();
   document.querySelector("#battle-enemy").classList.add("restored");
   document.querySelector("#battle-message").textContent = `RESTORED! You earned ${config.restoreReward} Divine Points.`;
   updateHud();
@@ -511,13 +580,18 @@ function finishRestoration() {
     setBattleButtons(false);
     showScreen("upgrades");
     updateUpgradeButtons();
-    document.querySelector("#upgrade-message").textContent = "Your first branch is ready. The Old Ruins opened on the kingdom map.";
+    document.querySelector("#upgrade-message").textContent = areaCleared
+      ? `${area.name} is cleared. A village path opened on the kingdom map.`
+      : `${area.name}: ${remainingEnemies} controlled cubes remain.`;
   }, 900);
 }
 
-function unlockKingdomNode(nodeId) {
-  const node = kingdomMap.nodes.find((mapNode) => mapNode.id === nodeId);
-  if (node) node.unlocked = true;
+function updateVillageLocks() {
+  kingdomMap.nodes.forEach((node) => {
+    if (node.kind !== "village") return;
+    const requiredArea = areas[node.unlocksAfter];
+    node.unlocked = !!requiredArea && requiredArea.enemies.length > 0 && requiredArea.enemies.every((enemy) => enemy.restored);
+  });
 }
 
 function buyUpgrade(type) {
@@ -573,9 +647,10 @@ function resetGame() {
     });
   });
   kingdomMap.nodes.forEach((node) => {
-    node.unlocked = node.id === "clearing";
+    node.unlocked = node.kind !== "village";
   });
-  currentAreaId = "clearing";
+  currentAreaId = "sylvan";
+  updateVillageLocks();
   enterKingdom();
   contactLockedUntil = 0;
   updateUpgradeButtons();
@@ -646,11 +721,11 @@ function drawKingdomNode(node, cameraX, cameraY) {
   ctx.stroke();
   ctx.restore();
 
-  if (node.id === "clearing") drawTinyShrine(x - 18, y - 28);
-  if (node.id === "ruins") drawRuin(x - 24, y - 30);
-  if (node.id === "village") drawHouse(x - 26, y - 34);
-  if (node.id === "tower") drawTower(x - 17, y - 48);
-  if (node.id === "grove") drawTree(x - 18, y - 35, 1.2);
+  if (node.id === "sylvan") drawTinyShrine(x - 18, y - 28);
+  if (node.id === "azureApex") drawRuin(x - 24, y - 30);
+  if (node.id === "sylvanVillage") drawHouse(x - 26, y - 34);
+  if (node.id === "controlledPalace") drawTower(x - 17, y - 48);
+  if (node.id === "controlledPlains") drawTree(x - 18, y - 35, 1.2);
 
   ctx.fillStyle = node.unlocked ? "#f3eee1" : "#b8b2a4";
   ctx.font = "800 15px Trebuchet MS";
@@ -741,39 +816,161 @@ function drawTile(tile, x, y, healed) {
 
 function drawPlayer() {
   const camera = gameMode === "kingdom" ? kingdomMap : areas[currentAreaId];
-  const x = player.x - camera.cameraX;
+  const screenX = player.x - camera.cameraX;
   const y = player.y - camera.cameraY;
-
   ctx.save();
-  ctx.translate(x + (player.facing === -1 ? player.width : 0), y);
+  ctx.translate(screenX + (player.facing === -1 ? player.width : 0), 0);
   ctx.scale(player.facing, 1);
-  ctx.fillStyle = "#f4e84c";
+  const x = 0;
   ctx.strokeStyle = "#201f25";
-  ctx.lineWidth = 3;
-  roundRect(0, 10, player.width, player.height - 4, 10);
-  ctx.fill();
-  ctx.stroke();
+  ctx.lineWidth = 4;
+  ctx.lineJoin = "round";
 
-  ctx.fillStyle = "#f4f1dc";
-  roundRect(4, 4, player.width - 8, 25, 8);
-  ctx.fill();
-  ctx.stroke();
+  if (player.view === "back") {
+    ctx.fillStyle = "#f4e84c";
+    ctx.beginPath();
+    ctx.moveTo(x + 12, y + 35);
+    ctx.quadraticCurveTo(x - 3, y + 52, x + 4, y + 78);
+    ctx.lineTo(x - 5, y + 117);
+    ctx.quadraticCurveTo(x + 17, y + 126, x + 31, y + 119);
+    ctx.quadraticCurveTo(x + 46, y + 127, x + 66, y + 117);
+    ctx.lineTo(x + 58, y + 78);
+    ctx.quadraticCurveTo(x + 64, y + 52, x + 48, y + 35);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
 
-  if (player.view !== "back") {
-    ctx.fillStyle = "#201f25";
-    roundRect(13, 15, 4, 10, 2);
+    ctx.fillStyle = "#e9d83e";
+    ctx.beginPath();
+    ctx.arc(x + 33, y + 27, 29, Math.PI, 0);
+    ctx.lineTo(x + 58, y + 46);
+    ctx.lineTo(x + 8, y + 46);
+    ctx.closePath();
     ctx.fill();
-    roundRect(24, 15, 4, 10, 2);
+    ctx.stroke();
+
+    ctx.strokeStyle = "#28251e";
+    ctx.lineWidth = 3;
+    [[15, 48, 10, 107], [27, 45, 24, 114], [39, 45, 43, 114], [51, 50, 56, 108]].forEach(([x1, y1, x2, y2]) => {
+      ctx.beginPath();
+      ctx.moveTo(x + x1, y + y1);
+      ctx.quadraticCurveTo(x + x1 - 4, y + (y1 + y2) / 2, x + x2, y + y2);
+      ctx.stroke();
+    });
+
+    ctx.strokeStyle = "#f2d93d";
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(x + 18, y + 17);
+    ctx.lineTo(x + 2, y + 11);
+    ctx.lineTo(x - 4, y - 3);
+    ctx.moveTo(x + 3, y + 7);
+    ctx.lineTo(x - 8, y + 4);
+    ctx.lineTo(x - 8, y - 8);
+    ctx.moveTo(x + 48, y + 17);
+    ctx.lineTo(x + 64, y + 11);
+    ctx.lineTo(x + 70, y - 3);
+    ctx.moveTo(x + 63, y + 7);
+    ctx.lineTo(x + 74, y + 4);
+    ctx.lineTo(x + 74, y - 8);
+    ctx.stroke();
+
+    ctx.fillStyle = "#f2d93d";
+    ctx.strokeStyle = "#201f25";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(x + 19, y + 10);
+    ctx.lineTo(x + 19, y - 6);
+    ctx.lineTo(x + 28, y + 1);
+    ctx.lineTo(x + 33, y - 11);
+    ctx.lineTo(x + 40, y + 1);
+    ctx.lineTo(x + 49, y - 6);
+    ctx.lineTo(x + 48, y + 10);
+    ctx.closePath();
     ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+    return;
   }
 
-  ctx.strokeStyle = "#f2d93d";
+  ctx.fillStyle = "#f4e84c";
+  ctx.beginPath();
+  ctx.arc(x + 33, y + 29, 31, Math.PI, 0);
+  ctx.lineTo(x + 60, y + 48);
+  ctx.lineTo(x + 6, y + 48);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = "#f4e84c";
+  ctx.beginPath();
+  ctx.moveTo(x + 12, y + 36);
+  ctx.quadraticCurveTo(x - 2, y + 48, x + 4, y + 76);
+  ctx.lineTo(x - 4, y + 116);
+  ctx.quadraticCurveTo(x + 18, y + 126, x + 30, y + 120);
+  ctx.quadraticCurveTo(x + 43, y + 127, x + 65, y + 118);
+  ctx.lineTo(x + 57, y + 76);
+  ctx.quadraticCurveTo(x + 64, y + 48, x + 48, y + 36);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.strokeStyle = "#28251e";
+  ctx.lineWidth = 3;
+  [[16, 50, 12, 105], [26, 48, 22, 112], [38, 47, 42, 114], [49, 52, 54, 108], [10, 64, 4, 92]].forEach(([x1, y1, x2, y2]) => {
+    ctx.beginPath();
+    ctx.moveTo(x + x1, y + y1);
+    ctx.quadraticCurveTo(x + x1 - 5, y + (y1 + y2) / 2, x + x2, y + y2);
+    ctx.stroke();
+  });
+
+  ctx.fillStyle = "#f4f1dc";
+  ctx.strokeStyle = "#201f25";
+  ctx.lineWidth = 4;
+  roundRect(x + 7, y + 8, 51, 43, 12);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = "#201f25";
+  roundRect(x + 23, y + 25, 4, 15, 2);
+  ctx.fill();
+  roundRect(x + 43, y + 25, 4, 15, 2);
+  ctx.fill();
+
+  ctx.fillStyle = "#f2d93d";
+  ctx.strokeStyle = "#201f25";
   ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.moveTo(9, 6);
-  ctx.lineTo(2, -8);
-  ctx.moveTo(27, 6);
-  ctx.lineTo(35, -8);
+  ctx.moveTo(x + 18, y + 10);
+  ctx.lineTo(x + 18, y - 6);
+  ctx.lineTo(x + 27, y + 1);
+  ctx.lineTo(x + 33, y - 11);
+  ctx.lineTo(x + 40, y + 1);
+  ctx.lineTo(x + 50, y - 6);
+  ctx.lineTo(x + 49, y + 11);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.strokeStyle = "#f2d93d";
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(x + 18, y + 18);
+  ctx.lineTo(x + 2, y + 12);
+  ctx.lineTo(x - 4, y - 2);
+  ctx.moveTo(x + 3, y + 7);
+  ctx.lineTo(x - 8, y + 4);
+  ctx.lineTo(x - 8, y - 8);
+  ctx.moveTo(x - 1, y + 9);
+  ctx.lineTo(x + 9, y - 2);
+  ctx.moveTo(x + 48, y + 18);
+  ctx.lineTo(x + 64, y + 12);
+  ctx.lineTo(x + 70, y - 2);
+  ctx.moveTo(x + 63, y + 7);
+  ctx.lineTo(x + 74, y + 4);
+  ctx.lineTo(x + 74, y - 8);
+  ctx.moveTo(x + 67, y + 9);
+  ctx.lineTo(x + 57, y - 2);
   ctx.stroke();
   ctx.restore();
 }
