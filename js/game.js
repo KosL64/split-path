@@ -13,6 +13,8 @@ const config = {
   tileSize: 48,
   mapMoveSpeed: 3,
   areaMoveSpeed: 3.4,
+  sprintMultiplier: 2,
+  criticalChance: 0.25,
   restoreReward: 5,
   upgradeCost: 5,
   enemyAttack: 4,
@@ -24,6 +26,12 @@ const areaEnemyGoals = {
   sylvan: 20,
   azureApex: 31,
   controlledPlains: 55
+};
+
+const areaLevelRanges = {
+  sylvan: { min: 1, max: 20 },
+  azureApex: { min: 21, max: 50 },
+  controlledPlains: { min: 50, max: 100 }
 };
 
 const playerState = {
@@ -38,8 +46,8 @@ const playerState = {
 const player = {
   x: 140,
   y: 240,
-  width: 58,
-  height: 78,
+  width: 44,
+  height: 62,
   facing: 1,
   view: "front"
 };
@@ -184,17 +192,49 @@ function createEnemiesForArea(area, count, seedText) {
   const marked = positions.filter((position) => position.tile === "C");
   const shuffled = seededShuffle(positions.filter((position) => position.tile !== "C"), seedFromText(seedText));
   const orderedPositions = [...marked, ...shuffled];
+  const levelRange = areaLevelRanges[seedText] || { min: 1, max: 1 };
 
-  return orderedPositions.slice(0, count).map((position, index) => ({
-    id: `${seedText}-cube-${index + 1}`,
-    x: position.x * config.tileSize + 7,
-    y: position.y * config.tileSize + 5,
-    width: 34,
-    height: 38,
-    restored: false,
-    controlMax: 12,
-    control: 12
-  }));
+  return orderedPositions.slice(0, count).map((position, index) => {
+    const level = levelForEnemy(index, count, levelRange);
+    const stats = statsForLevel(level);
+
+    return {
+      id: `${seedText}-cube-${index + 1}`,
+      level,
+      attack: stats.attack,
+      defense: stats.defense,
+      maxHealth: stats.health,
+      x: position.x * config.tileSize + 7,
+      y: position.y * config.tileSize + 5,
+      width: 34,
+      height: 38,
+      restored: false,
+      controlMax: stats.health,
+      control: stats.health,
+      moveX: 0,
+      moveY: 0,
+      movingUntil: 0,
+      waitUntil: 0
+    };
+  });
+}
+
+function levelForEnemy(index, totalEnemies, range) {
+  if (totalEnemies <= 1) return range.min;
+  const progress = index / (totalEnemies - 1);
+  return Math.round(range.min + (range.max - range.min) * progress);
+}
+
+function statsForLevel(level) {
+  return {
+    attack: minimumStat(Math.round((level - 2) + 5)),
+    defense: minimumStat(Math.round((level / 5) + 15)),
+    health: minimumStat(Math.round((level * 3) + 20))
+  };
+}
+
+function minimumStat(value) {
+  return Math.max(1, value);
 }
 
 function collectEnemySpawnTiles(area) {
@@ -327,8 +367,13 @@ function movePlayer() {
   if (vertical < 0) player.view = "back";
   else if (horizontal || vertical > 0) player.view = "front";
 
-  const speed = gameMode === "kingdom" ? config.mapMoveSpeed : config.areaMoveSpeed;
+  const baseSpeed = gameMode === "kingdom" ? config.mapMoveSpeed : config.areaMoveSpeed;
+  const speed = isSprinting() ? baseSpeed * config.sprintMultiplier : baseSpeed;
   attemptMove(horizontal * speed, vertical * speed);
+}
+
+function isSprinting() {
+  return keys.has("x") || keys.has("shift");
 }
 
 function attemptMove(deltaX, deltaY) {
@@ -350,6 +395,58 @@ function tryMove(deltaX, deltaY) {
     player.x = next.x;
     player.y = next.y;
   }
+}
+
+function moveEnemies() {
+  if (gameMode !== "area") return;
+  const area = areas[currentAreaId];
+
+  area.enemies.forEach((enemy) => {
+    if (enemy.restored) return;
+    moveEnemy(enemy);
+  });
+}
+
+function moveEnemy(enemy) {
+  const now = performance.now();
+
+  if (now < enemy.waitUntil) return;
+
+  if (now >= enemy.movingUntil) {
+    chooseEnemyDirection(enemy);
+    return;
+  }
+
+  const speed = 0.8;
+  const next = {
+    ...enemy,
+    x: enemy.x + enemy.moveX * speed,
+    y: enemy.y + enemy.moveY * speed
+  };
+
+  if (collidesWithBlockedTile(next)) {
+    enemy.movingUntil = 0;
+    enemy.waitUntil = now + 350;
+    return;
+  }
+
+  enemy.x = next.x;
+  enemy.y = next.y;
+}
+
+function chooseEnemyDirection(enemy) {
+  const directions = [
+    { x: 1, y: 0 },
+    { x: -1, y: 0 },
+    { x: 0, y: 1 },
+    { x: 0, y: -1 },
+    { x: 0, y: 0 }
+  ];
+  const direction = directions[Math.floor(Math.random() * directions.length)];
+  enemy.moveX = direction.x;
+  enemy.moveY = direction.y;
+  enemy.movingUntil = performance.now() + 700 + Math.random() * 900;
+  enemy.waitUntil = direction.x || direction.y ? 0 : performance.now() + 600;
 }
 
 function collidesWithBlockedTile(rect) {
@@ -471,7 +568,7 @@ function startBattle(enemy) {
   battleDefending = false;
   enemy.control = enemy.controlMax;
   document.querySelector("#battle-enemy").classList.remove("restored");
-  document.querySelector("#battle-message").textContent = "A controlled cube lashes out. Purify it with your attacks.";
+  document.querySelector("#battle-message").textContent = `A level ${enemy.level} controlled cube lashes out. Purify it with your attacks.`;
   showScreen("battle");
   updateBattleStats();
 }
@@ -482,7 +579,9 @@ function updateBattleStats() {
   document.querySelector("#player-health").textContent = `${playerState.health} / ${playerState.maxHealth}`;
   document.querySelector("#enemy-control-meter").max = activeEnemy?.controlMax || 12;
   document.querySelector("#enemy-control-meter").value = activeEnemy?.control || 0;
-  document.querySelector("#enemy-control").textContent = activeEnemy?.control || 0;
+  document.querySelector("#enemy-control").textContent = activeEnemy
+    ? `${activeEnemy.control} / ${activeEnemy.controlMax} | Lv ${activeEnemy.level} | Atk ${activeEnemy.attack} | Def ${activeEnemy.defense}`
+    : "0";
 }
 
 function setBattleButtons(disabled) {
@@ -500,7 +599,9 @@ function playBattleEffect(name) {
 }
 
 function enemyTurn() {
-  const damage = Math.max(1, config.enemyAttack - playerState.defense - (battleDefending ? 2 : 0));
+  const critical = rollCriticalHit();
+  const baseDamage = Math.max(1, activeEnemy.attack - playerState.defense - (battleDefending ? 2 : 0));
+  const damage = critical ? baseDamage * 2 : baseDamage;
   battleDefending = false;
   playerState.health = Math.max(0, playerState.health - damage);
   updateBattleStats();
@@ -517,7 +618,9 @@ function enemyTurn() {
     return;
   }
 
-  document.querySelector("#battle-message").textContent += ` The cube strikes back for ${damage} damage.`;
+  document.querySelector("#battle-message").textContent += critical
+    ? ` Critical hit! The cube strikes back for ${damage} damage.`
+    : ` The cube strikes back for ${damage} damage.`;
   setBattleButtons(false);
 }
 
@@ -525,13 +628,21 @@ function queueEnemyTurn() {
   battleTimer = window.setTimeout(enemyTurn, 650);
 }
 
+function rollCriticalHit() {
+  return Math.random() < config.criticalChance;
+}
+
 function attackAction() {
   if (battleBusy || !activeEnemy) return;
   setBattleButtons(true);
   playBattleEffect("attack-effect");
-  const power = playerState.restorePower;
+  const critical = rollCriticalHit();
+  const basePower = Math.max(1, playerState.restorePower - Math.floor(activeEnemy.defense / 10));
+  const power = critical ? basePower * 2 : basePower;
   activeEnemy.control = Math.max(0, activeEnemy.control - power);
-  document.querySelector("#battle-message").textContent = `Your radiant slash reduces Control by ${power}.`;
+  document.querySelector("#battle-message").textContent = critical
+    ? `Critical hit! Your radiant slash reduces Control by ${power}.`
+    : `Your radiant slash reduces Control by ${power}.`;
   updateBattleStats();
 
   if (activeEnemy.control === 0) {
@@ -644,6 +755,10 @@ function resetGame() {
     area.enemies.forEach((enemy) => {
       enemy.restored = false;
       enemy.control = enemy.controlMax;
+      enemy.moveX = 0;
+      enemy.moveY = 0;
+      enemy.movingUntil = 0;
+      enemy.waitUntil = 0;
     });
   });
   kingdomMap.nodes.forEach((node) => {
@@ -818,9 +933,12 @@ function drawPlayer() {
   const camera = gameMode === "kingdom" ? kingdomMap : areas[currentAreaId];
   const screenX = player.x - camera.cameraX;
   const y = player.y - camera.cameraY;
+  const spriteScale = 0.72;
+  const spriteWidth = 78 * spriteScale;
+  const drawX = screenX + player.width / 2 - spriteWidth / 2;
   ctx.save();
-  ctx.translate(screenX + (player.facing === -1 ? player.width : 0), 0);
-  ctx.scale(player.facing, 1);
+  ctx.translate(drawX + (player.facing === -1 ? spriteWidth : 0), y);
+  ctx.scale(player.facing * spriteScale, spriteScale);
   const x = 0;
   ctx.strokeStyle = "#201f25";
   ctx.lineWidth = 4;
@@ -1000,6 +1118,10 @@ function drawEnemy(enemy, cameraX, cameraY) {
     ctx.font = "700 14px Trebuchet MS";
     ctx.fillStyle = "#f2c95f";
     ctx.fillText("...", x + 11, y - 10);
+  } else {
+    ctx.font = "800 12px Trebuchet MS";
+    ctx.fillStyle = "#f3eee1";
+    ctx.fillText(`Lv ${enemy.level}`, x - 2, y - 10);
   }
 }
 
@@ -1070,6 +1192,7 @@ function gameLoop(time) {
 
   if (currentScreen === "game" && delta < 80) {
     movePlayer();
+    moveEnemies();
     updateCamera();
     checkAreaEncounters();
     drawWorld();
