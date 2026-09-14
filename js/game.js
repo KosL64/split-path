@@ -3,6 +3,7 @@ const screens = {
   story: document.querySelector("#story-screen"),
   game: document.querySelector("#game-screen"),
   battle: document.querySelector("#battle-screen"),
+  lose: document.querySelector("#lose-screen"),
   upgrades: document.querySelector("#upgrade-screen")
 };
 
@@ -17,9 +18,22 @@ const config = {
   criticalChance: 0.25,
   restoreReward: 5,
   upgradeCost: 5,
+  branchUpgradeCost: 10,
   enemyAttack: 4,
   healAmount: 5,
   contactCooldown: 900
+};
+
+const upgradeDefinitions = {
+  damage: { cost: 5, requires: null },
+  defense: { cost: 5, requires: null },
+  health: { cost: 5, requires: null },
+  lifeSteal: { cost: 10, requires: "health" },
+  greaterHealth: { cost: 10, requires: "health" },
+  greaterDamage: { cost: 10, requires: "damage" },
+  magic: { cost: 10, requires: "damage" },
+  greaterDefense: { cost: 10, requires: "defense" },
+  thorns: { cost: 10, requires: "defense" }
 };
 
 const areaEnemyGoals = {
@@ -40,7 +54,22 @@ const playerState = {
   maxHealth: 20,
   restorePower: 3,
   defense: 0,
-  upgrades: { damage: 0, defense: 0, health: 0 }
+  healAmount: 5,
+  lifeSteal: 0,
+  thorns: false,
+  strongDefend: false,
+  magic: false,
+  upgrades: {
+    damage: 0,
+    defense: 0,
+    health: 0,
+    lifeSteal: 0,
+    greaterHealth: 0,
+    greaterDamage: 0,
+    magic: 0,
+    greaterDefense: 0,
+    thorns: 0
+  }
 };
 
 const player = {
@@ -228,7 +257,7 @@ function levelForEnemy(index, totalEnemies, range) {
 function statsForLevel(level) {
   return {
     attack: minimumStat(Math.round((level - 2) + 5)),
-    defense: minimumStat(Math.round((level / 5) + 15)),
+    defense: minimumStat(Math.round((level / 5) + 3)),
     health: minimumStat(Math.round((level * 3) + 20))
   };
 }
@@ -466,7 +495,7 @@ function collidesWithBlockedTile(rect) {
 }
 
 function isBlockedTile(tile) {
-  return !tile || tile === "^" || tile === "T" || tile === "R" || tile === "W";
+  return !tile || tile === "^" || tile === "T" || tile === "W";
 }
 
 function updateCamera() {
@@ -569,6 +598,7 @@ function startBattle(enemy) {
   enemy.control = enemy.controlMax;
   document.querySelector("#battle-enemy").classList.remove("restored");
   document.querySelector("#battle-message").textContent = `A level ${enemy.level} controlled cube lashes out. Purify it with your attacks.`;
+  updateBattleActions();
   showScreen("battle");
   updateBattleStats();
 }
@@ -591,6 +621,12 @@ function setBattleButtons(disabled) {
   });
 }
 
+function updateBattleActions() {
+  document.querySelector("#attack-action").textContent = playerState.magic ? "Magic" : "Attack";
+  document.querySelector("#light-spell-action").classList.toggle("hidden", !playerState.magic);
+  document.querySelector("#soul-spell-action").classList.toggle("hidden", !playerState.magic);
+}
+
 function playBattleEffect(name) {
   const stage = document.querySelector(".battle-stage");
   stage.classList.remove("attack-effect", "defend-effect", "heal-effect");
@@ -601,26 +637,35 @@ function playBattleEffect(name) {
 function enemyTurn() {
   const critical = rollCriticalHit();
   const baseDamage = Math.max(1, activeEnemy.attack - playerState.defense - (battleDefending ? 2 : 0));
-  const damage = critical ? baseDamage * 2 : baseDamage;
+  const guardedCritical = critical && !(battleDefending && playerState.strongDefend);
+  const damage = guardedCritical ? baseDamage * 2 : baseDamage;
+  const thornsDamage = playerState.thorns ? Math.max(1, Math.round(activeEnemy.attack / 4)) : 0;
   battleDefending = false;
   playerState.health = Math.max(0, playerState.health - damage);
+  if (thornsDamage && activeEnemy) {
+    activeEnemy.control = Math.max(0, activeEnemy.control - thornsDamage);
+  }
   updateBattleStats();
 
-  if (playerState.health === 0) {
-    document.querySelector("#battle-message").textContent = "You retreat and recover your strength.";
-    window.setTimeout(() => {
-      playerState.health = playerState.maxHealth;
-      contactLockedUntil = performance.now() + config.contactCooldown;
-      showScreen("game");
-      updateHud();
-      setBattleButtons(false);
-    }, 900);
+  if (activeEnemy?.control === 0) {
+    document.querySelector("#battle-message").textContent += ` Thorns reflect ${thornsDamage} control damage.`;
+    finishRestoration();
     return;
   }
 
-  document.querySelector("#battle-message").textContent += critical
+  if (playerState.health === 0) {
+    showLoseScreen();
+    return;
+  }
+
+  const criticalText = critical && playerState.strongDefend && damage === baseDamage
+    ? " Your stronger guard cancels the critical hit."
+    : "";
+  const thornsText = thornsDamage ? ` Thorns reflect ${thornsDamage} control damage.` : "";
+  document.querySelector("#battle-message").textContent += guardedCritical
     ? ` Critical hit! The cube strikes back for ${damage} damage.`
     : ` The cube strikes back for ${damage} damage.`;
+  document.querySelector("#battle-message").textContent += criticalText + thornsText;
   setBattleButtons(false);
 }
 
@@ -632,17 +677,70 @@ function rollCriticalHit() {
   return Math.random() < config.criticalChance;
 }
 
+function showLoseScreen() {
+  window.clearTimeout(battleTimer);
+  setBattleButtons(false);
+  showScreen("lose");
+}
+
+function revivePlayerAtAreaStart() {
+  const area = areas[currentAreaId];
+  playerState.health = playerState.maxHealth;
+  player.x = area.start.x * config.tileSize + 6;
+  player.y = area.start.y * config.tileSize + 2;
+  contactLockedUntil = performance.now() + config.contactCooldown * 2;
+  updateHud();
+  showScreen("game");
+}
+
 function attackAction() {
   if (battleBusy || !activeEnemy) return;
+  performPlayerAttack({
+    name: playerState.magic ? "Magic" : "Attack",
+    verb: attackVerb(),
+    attackPower: currentAttackPower(),
+    extraHeal: 0
+  });
+}
+
+function lightSpellAction() {
+  if (battleBusy || !activeEnemy) return;
+  performPlayerAttack({
+    name: "Light Spell",
+    verb: "Your light spell",
+    attackPower: currentAttackPower() + 2,
+    extraHeal: 0
+  });
+}
+
+function soulSpellAction() {
+  if (battleBusy || !activeEnemy) return;
+  performPlayerAttack({
+    name: "Soul Spell",
+    verb: "Your soul spell",
+    attackPower: Math.max(1, currentAttackPower() - 1),
+    extraHeal: 2
+  });
+}
+
+function performPlayerAttack(action) {
   setBattleButtons(true);
   playBattleEffect("attack-effect");
   const critical = rollCriticalHit();
-  const basePower = Math.max(1, playerState.restorePower - Math.floor(activeEnemy.defense / 10));
-  const power = critical ? basePower * 2 : basePower;
+  const attackPower = action.attackPower;
+  const power = damageAfterEnemyDefense(critical ? attackPower * 2 : attackPower, activeEnemy.defense);
   activeEnemy.control = Math.max(0, activeEnemy.control - power);
+  const lifeStealHeal = playerState.lifeSteal ? Math.max(1, Math.round(power / 2)) : 0;
+  const totalHeal = lifeStealHeal + action.extraHeal;
+  if (totalHeal) {
+    playerState.health = Math.min(playerState.maxHealth, playerState.health + totalHeal);
+  }
   document.querySelector("#battle-message").textContent = critical
-    ? `Critical hit! Your radiant slash reduces Control by ${power}.`
-    : `Your radiant slash reduces Control by ${power}.`;
+    ? `Critical hit! ${action.verb} reduces Control by ${power}.`
+    : `${action.verb} reduces Control by ${power}.`;
+  if (totalHeal) {
+    document.querySelector("#battle-message").textContent += ` You restore ${totalHeal} health.`;
+  }
   updateBattleStats();
 
   if (activeEnemy.control === 0) {
@@ -653,12 +751,26 @@ function attackAction() {
   queueEnemyTurn();
 }
 
+function currentAttackPower() {
+  return playerState.magic ? playerState.restorePower + 1 : playerState.restorePower;
+}
+
+function attackVerb() {
+  return playerState.magic ? "Your split spell" : "Your radiant slash";
+}
+
+function damageAfterEnemyDefense(attack, defense) {
+  return Math.max(1, Math.round(attack / Math.max(1, defense / 2)));
+}
+
 function defendAction() {
   if (battleBusy) return;
   setBattleButtons(true);
   battleDefending = true;
   playBattleEffect("defend-effect");
-  document.querySelector("#battle-message").textContent = "A protective light surrounds you. Your next hit is reduced.";
+  document.querySelector("#battle-message").textContent = playerState.strongDefend
+    ? "A stronger protective light surrounds you. Enemy critical hits are canceled while defending."
+    : "A protective light surrounds you. Your next hit is reduced.";
   queueEnemyTurn();
 }
 
@@ -666,7 +778,7 @@ function healAction() {
   if (battleBusy) return;
   setBattleButtons(true);
   playBattleEffect("heal-effect");
-  const restored = Math.min(config.healAmount, playerState.maxHealth - playerState.health);
+  const restored = Math.min(playerState.healAmount, playerState.maxHealth - playerState.health);
   playerState.health += restored;
   document.querySelector("#battle-message").textContent = restored ? `Warm light restores ${restored} health.` : "Your health is already full.";
   updateBattleStats();
@@ -706,17 +818,25 @@ function updateVillageLocks() {
 }
 
 function buyUpgrade(type) {
+  const upgrade = upgradeDefinitions[type];
+  if (!upgrade) return;
+
   if (playerState.upgrades[type]) {
-    document.querySelector("#upgrade-message").textContent = "That first step is already chosen.";
+    document.querySelector("#upgrade-message").textContent = "That path step is already chosen.";
     return;
   }
 
-  if (playerState.divinePoints < config.upgradeCost) {
-    document.querySelector("#upgrade-message").textContent = "You need 5 Divine Points.";
+  if (upgrade.requires && !playerState.upgrades[upgrade.requires]) {
+    document.querySelector("#upgrade-message").textContent = "Choose the first step on that path before this branch.";
     return;
   }
 
-  playerState.divinePoints -= config.upgradeCost;
+  if (playerState.divinePoints < upgrade.cost) {
+    document.querySelector("#upgrade-message").textContent = `You need ${upgrade.cost} Divine Points.`;
+    return;
+  }
+
+  playerState.divinePoints -= upgrade.cost;
   playerState.upgrades[type] = 1;
 
   if (type === "damage") {
@@ -726,7 +846,7 @@ function buyUpgrade(type) {
 
   if (type === "defense") {
     playerState.defense += 1;
-    document.querySelector("#upgrade-message").textContent = "Pristine Guard I learned. Damage is reduced.";
+    document.querySelector("#upgrade-message").textContent = "Pristine Guard I learned. Damage taken -1.";
   }
 
   if (type === "health") {
@@ -735,21 +855,78 @@ function buyUpgrade(type) {
     document.querySelector("#upgrade-message").textContent = "Soul Light I learned. Maximum health increased.";
   }
 
+  if (type === "lifeSteal") {
+    playerState.lifeSteal = 1;
+    document.querySelector("#upgrade-message").textContent = "Soul Siphon I learned. Attacks now restore health.";
+  }
+
+  if (type === "greaterHealth") {
+    playerState.maxHealth += 10;
+    playerState.health = playerState.maxHealth;
+    playerState.healAmount += 5;
+    document.querySelector("#upgrade-message").textContent = "Greater Soul Light learned. Maximum health and Heal are stronger.";
+  }
+
+  if (type === "greaterDamage") {
+    playerState.restorePower += 2;
+    document.querySelector("#upgrade-message").textContent = "Radiant Force II learned. Attack is much stronger.";
+  }
+
+  if (type === "magic") {
+    playerState.magic = true;
+    updateBattleActions();
+    document.querySelector("#upgrade-message").textContent = "Split Spellcraft learned. Attack becomes magic.";
+  }
+
+  if (type === "greaterDefense") {
+    playerState.defense += 2;
+    playerState.strongDefend = true;
+    document.querySelector("#upgrade-message").textContent = "Pristine Guard II learned. Defend cancels enemy critical hits.";
+  }
+
+  if (type === "thorns") {
+    playerState.thorns = true;
+    document.querySelector("#upgrade-message").textContent = "Pristine Thorns learned. Enemies take recoil when they attack.";
+  }
+
   updateUpgradeButtons();
 }
 
 function updateUpgradeButtons() {
   document.querySelectorAll("[data-upgrade]").forEach((button) => {
+    const upgrade = upgradeDefinitions[button.dataset.upgrade];
     const purchased = playerState.upgrades[button.dataset.upgrade] > 0;
+    const locked = upgrade?.requires && !playerState.upgrades[upgrade.requires];
     button.classList.toggle("purchased", purchased);
-    button.disabled = purchased;
+    button.disabled = purchased || locked;
   });
   updateHud();
 }
 
 function resetGame() {
-  Object.assign(playerState, { divinePoints: 0, health: 20, maxHealth: 20, restorePower: 3, defense: 0 });
-  Object.assign(playerState.upgrades, { damage: 0, defense: 0, health: 0 });
+  Object.assign(playerState, {
+    divinePoints: 0,
+    health: 20,
+    maxHealth: 20,
+    restorePower: 3,
+    defense: 0,
+    healAmount: 5,
+    lifeSteal: 0,
+    thorns: false,
+    strongDefend: false,
+    magic: false
+  });
+  Object.assign(playerState.upgrades, {
+    damage: 0,
+    defense: 0,
+    health: 0,
+    lifeSteal: 0,
+    greaterHealth: 0,
+    greaterDamage: 0,
+    magic: 0,
+    greaterDefense: 0,
+    thorns: 0
+  });
   Object.values(areas).forEach((area) => {
     area.healed = false;
     area.enemies.forEach((enemy) => {
@@ -766,6 +943,8 @@ function resetGame() {
   });
   currentAreaId = "sylvan";
   updateVillageLocks();
+  document.querySelector("#attack-action").textContent = "Attack";
+  updateBattleActions();
   enterKingdom();
   contactLockedUntil = 0;
   updateUpgradeButtons();
@@ -932,14 +1111,17 @@ function drawTile(tile, x, y, healed) {
 function drawPlayer() {
   const camera = gameMode === "kingdom" ? kingdomMap : areas[currentAreaId];
   const screenX = player.x - camera.cameraX;
-  const y = player.y - camera.cameraY;
+  const screenY = player.y - camera.cameraY;
   const spriteScale = 0.72;
   const spriteWidth = 78 * spriteScale;
+  const spriteHeight = 132 * spriteScale;
   const drawX = screenX + player.width / 2 - spriteWidth / 2;
+  const drawY = screenY + player.height - spriteHeight + 8;
   ctx.save();
-  ctx.translate(drawX + (player.facing === -1 ? spriteWidth : 0), y);
+  ctx.translate(drawX + (player.facing === -1 ? spriteWidth : 0), drawY);
   ctx.scale(player.facing * spriteScale, spriteScale);
   const x = 0;
+  const y = 0;
   ctx.strokeStyle = "#201f25";
   ctx.lineWidth = 4;
   ctx.lineJoin = "round";
@@ -1251,6 +1433,8 @@ document.querySelector("#upgrade-button").addEventListener("click", () => {
 document.querySelector("#close-upgrades").addEventListener("click", () => showScreen("game"));
 document.querySelector("#reset-button").addEventListener("click", resetGame);
 document.querySelector("#attack-action").addEventListener("click", attackAction);
+document.querySelector("#light-spell-action").addEventListener("click", lightSpellAction);
+document.querySelector("#soul-spell-action").addEventListener("click", soulSpellAction);
 document.querySelector("#defend-action").addEventListener("click", defendAction);
 document.querySelector("#heal-action").addEventListener("click", healAction);
 document.querySelectorAll("[data-upgrade]").forEach((button) => {
@@ -1259,10 +1443,15 @@ document.querySelectorAll("[data-upgrade]").forEach((button) => {
 
 window.addEventListener("keydown", (event) => {
   const key = event.key.toLowerCase();
-  if (["arrowleft", "arrowright", "arrowup", "arrowdown", "a", "s", "d", "w"].includes(key)) {
+  if (["arrowleft", "arrowright", "arrowup", "arrowdown", "a", "s", "d", "w", " "].includes(key)) {
     event.preventDefault();
   }
   keys.add(key);
+
+  if (currentScreen === "lose" && (key === "z" || key === " ")) {
+    revivePlayerAtAreaStart();
+    return;
+  }
 
   if (key === "z" || key === "enter") usePrompt();
   if (key === "m" && currentScreen === "game" && gameMode === "area") leaveArea();
@@ -1284,5 +1473,6 @@ window.addEventListener("keydown", (event) => {
 window.addEventListener("keyup", (event) => keys.delete(event.key.toLowerCase()));
 
 updateHud();
+updateBattleActions();
 renderStory();
 drawWorld();

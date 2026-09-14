@@ -79,9 +79,21 @@
 
         <div class="battle-actions">
           <button id="attack-action" class="primary-button">Attack</button>
+          <button id="light-spell-action" class="hidden">Light Spell</button>
+          <button id="soul-spell-action" class="hidden">Soul Spell</button>
           <button id="defend-action">Defend</button>
           <button id="heal-action">Heal</button>
         </div>
+      </div>
+    </section>
+
+    <section id="lose-screen" class="screen">
+      <div class="battle-panel">
+        <div class="upgrade-header">
+          <p class="eyebrow">The path fades</p>
+          <h2>You Lose</h2>
+        </div>
+        <p id="lose-message">Press Z or Space to return to the start of the area.</p>
       </div>
     </section>
 
@@ -107,12 +119,42 @@
           <button data-upgrade="defense">
             <strong>Defense</strong>
             <span>Pristine Guard I</span>
-            <small>Incoming damage -1. Cost: 5 DP</small>
+            <small>Damage taken -1. Cost: 5 DP</small>
           </button>
           <button data-upgrade="health">
             <strong>Health</strong>
             <span>Soul Light I</span>
             <small>Maximum health +5. Cost: 5 DP</small>
+          </button>
+          <button data-upgrade="lifeSteal">
+            <strong>Life Steal</strong>
+            <span>Soul Siphon I</span>
+            <small>Attacks restore health. Cost: 10 DP</small>
+          </button>
+          <button data-upgrade="greaterHealth">
+            <strong>Greater Health</strong>
+            <span>Greater Soul Light</span>
+            <small>More health and stronger Heal. Cost: 10 DP</small>
+          </button>
+          <button data-upgrade="greaterDamage">
+            <strong>Greater Damage</strong>
+            <span>Radiant Force II</span>
+            <small>Restore power +2. Cost: 10 DP</small>
+          </button>
+          <button data-upgrade="magic">
+            <strong>Magic</strong>
+            <span>Split Spellcraft</span>
+            <small>Attack becomes spellcasting. Cost: 10 DP</small>
+          </button>
+          <button data-upgrade="greaterDefense">
+            <strong>Greater Defense</strong>
+            <span>Pristine Guard II</span>
+            <small>More defense and stronger Defend. Cost: 10 DP</small>
+          </button>
+          <button data-upgrade="thorns">
+            <strong>Thorns</strong>
+            <span>Pristine Thorns</span>
+            <small>Attackers take recoil. Cost: 10 DP</small>
           </button>
         </div>
 

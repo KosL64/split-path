@@ -471,12 +471,12 @@ meter {
 
 .upgrade-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: 14px;
 }
 
 .upgrade-grid button {
-  min-height: 170px;
+  min-height: 150px;
   display: grid;
   gap: 8px;
   align-content: center;
