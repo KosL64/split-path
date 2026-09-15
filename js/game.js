@@ -14,7 +14,7 @@ const config = {
   tileSize: 48,
   mapMoveSpeed: 3,
   areaMoveSpeed: 3.4,
-  sprintMultiplier: 2,
+  sprintMultiplier: 1.55,
   criticalChance: 0.25,
   restoreReward: 5,
   upgradeCost: 5,
@@ -25,15 +25,15 @@ const config = {
 };
 
 const upgradeDefinitions = {
-  damage: { cost: 5, requires: null },
-  defense: { cost: 5, requires: null },
-  health: { cost: 5, requires: null },
-  lifeSteal: { cost: 10, requires: "health" },
-  greaterHealth: { cost: 10, requires: "health" },
-  greaterDamage: { cost: 10, requires: "damage" },
-  magic: { cost: 10, requires: "damage" },
-  greaterDefense: { cost: 10, requires: "defense" },
-  thorns: { cost: 10, requires: "defense" }
+  damage: { cost: 5, requires: null, path: "damage", tier: 1 },
+  defense: { cost: 5, requires: null, path: "defense", tier: 1 },
+  health: { cost: 5, requires: null, path: "health", tier: 1 },
+  lifeSteal: { cost: 10, requires: "health", path: "health", tier: 2, conflictsWith: "greaterHealth" },
+  greaterHealth: { cost: 10, requires: "health", path: "health", tier: 2, conflictsWith: "lifeSteal" },
+  greaterDamage: { cost: 10, requires: "damage", path: "damage", tier: 2, conflictsWith: "magic" },
+  magic: { cost: 10, requires: "damage", path: "damage", tier: 2, conflictsWith: "greaterDamage" },
+  greaterDefense: { cost: 10, requires: "defense", path: "defense", tier: 2, conflictsWith: "thorns" },
+  thorns: { cost: 10, requires: "defense", path: "defense", tier: 2, conflictsWith: "greaterDefense" }
 };
 
 const areaEnemyGoals = {
@@ -52,8 +52,8 @@ const playerState = {
   divinePoints: 0,
   health: 20,
   maxHealth: 20,
-  restorePower: 3,
-  defense: 0,
+  restorePower: 5,
+  defense: 3,
   healAmount: 5,
   lifeSteal: 0,
   thorns: false,
@@ -831,6 +831,11 @@ function buyUpgrade(type) {
     return;
   }
 
+  if (upgrade.conflictsWith && playerState.upgrades[upgrade.conflictsWith]) {
+    document.querySelector("#upgrade-message").textContent = "That branch is locked because you chose the other path.";
+    return;
+  }
+
   if (playerState.divinePoints < upgrade.cost) {
     document.querySelector("#upgrade-message").textContent = `You need ${upgrade.cost} Divine Points.`;
     return;
@@ -856,37 +861,41 @@ function buyUpgrade(type) {
   }
 
   if (type === "lifeSteal") {
+    playerState.maxHealth += 3;
+    playerState.health = Math.min(playerState.maxHealth, playerState.health + 3);
     playerState.lifeSteal = 1;
-    document.querySelector("#upgrade-message").textContent = "Soul Siphon I learned. Attacks now restore health.";
+    document.querySelector("#upgrade-message").textContent = "Soul Siphon I learned. Health rises by 3 and attacks now restore health.";
   }
 
   if (type === "greaterHealth") {
-    playerState.maxHealth += 10;
+    playerState.maxHealth += 13;
     playerState.health = playerState.maxHealth;
     playerState.healAmount += 5;
-    document.querySelector("#upgrade-message").textContent = "Greater Soul Light learned. Maximum health and Heal are stronger.";
+    document.querySelector("#upgrade-message").textContent = "Greater Soul Light learned. Health rises by 3, and maximum health and Heal are stronger.";
   }
 
   if (type === "greaterDamage") {
-    playerState.restorePower += 2;
-    document.querySelector("#upgrade-message").textContent = "Radiant Force II learned. Attack is much stronger.";
+    playerState.restorePower += 3;
+    document.querySelector("#upgrade-message").textContent = "Radiant Force II learned. Attack rises by 3.";
   }
 
   if (type === "magic") {
+    playerState.restorePower += 3;
     playerState.magic = true;
     updateBattleActions();
-    document.querySelector("#upgrade-message").textContent = "Split Spellcraft learned. Attack becomes magic.";
+    document.querySelector("#upgrade-message").textContent = "Split Spellcraft learned. Attack rises by 3 and becomes magic.";
   }
 
   if (type === "greaterDefense") {
-    playerState.defense += 2;
+    playerState.defense += 3;
     playerState.strongDefend = true;
-    document.querySelector("#upgrade-message").textContent = "Pristine Guard II learned. Defend cancels enemy critical hits.";
+    document.querySelector("#upgrade-message").textContent = "Pristine Guard II learned. Defense rises by 3 and Defend cancels enemy critical hits.";
   }
 
   if (type === "thorns") {
+    playerState.defense += 3;
     playerState.thorns = true;
-    document.querySelector("#upgrade-message").textContent = "Pristine Thorns learned. Enemies take recoil when they attack.";
+    document.querySelector("#upgrade-message").textContent = "Pristine Thorns learned. Defense rises by 3 and enemies take recoil.";
   }
 
   updateUpgradeButtons();
@@ -897,8 +906,10 @@ function updateUpgradeButtons() {
     const upgrade = upgradeDefinitions[button.dataset.upgrade];
     const purchased = playerState.upgrades[button.dataset.upgrade] > 0;
     const locked = upgrade?.requires && !playerState.upgrades[upgrade.requires];
+    const branchLocked = upgrade?.conflictsWith && playerState.upgrades[upgrade.conflictsWith];
     button.classList.toggle("purchased", purchased);
-    button.disabled = purchased || locked;
+    button.classList.toggle("locked", !!locked || !!branchLocked);
+    button.disabled = purchased || locked || branchLocked;
   });
   updateHud();
 }
@@ -908,8 +919,8 @@ function resetGame() {
     divinePoints: 0,
     health: 20,
     maxHealth: 20,
-    restorePower: 3,
-    defense: 0,
+    restorePower: 5,
+    defense: 3,
     healAmount: 5,
     lifeSteal: 0,
     thorns: false,

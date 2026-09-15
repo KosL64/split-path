@@ -105,57 +105,73 @@
           <p id="upgrade-points">DP: 0</p>
         </div>
 
-        <div class="path-map" aria-hidden="true">
-          <span>Basic</span>
-          <i></i><i></i><i></i>
-        </div>
+        <div class="divine-tree" aria-label="Divine Path upgrade tree">
+          <div class="tree-row tree-row-branches">
+            <button class="tree-node node-small path-damage" data-upgrade="greaterDamage">
+              <strong>A</strong>
+              <span>Greater Damage</span>
+              <small>+3 attack | 10 DP</small>
+            </button>
+            <button class="tree-node node-small path-damage" data-upgrade="magic">
+              <strong>A</strong>
+              <span>Magic</span>
+              <small>+3 attack | 10 DP</small>
+            </button>
+            <button class="tree-node node-small path-health" data-upgrade="lifeSteal">
+              <strong>H</strong>
+              <span>Life Steal</span>
+              <small>+3 health | 10 DP</small>
+            </button>
+            <button class="tree-node node-small path-health" data-upgrade="greaterHealth">
+              <strong>H</strong>
+              <span>Greater Health</span>
+              <small>+3 health | 10 DP</small>
+            </button>
+            <button class="tree-node node-small path-defense" data-upgrade="greaterDefense">
+              <strong>D</strong>
+              <span>Greater Defense</span>
+              <small>+3 defense | 10 DP</small>
+            </button>
+            <button class="tree-node node-small path-defense" data-upgrade="thorns">
+              <strong>D</strong>
+              <span>Thorns</span>
+              <small>+3 defense | 10 DP</small>
+            </button>
+          </div>
 
-        <div class="upgrade-grid">
-          <button data-upgrade="damage">
-            <strong>Damage</strong>
-            <span>Radiant Force I</span>
-            <small>Restore power +1. Cost: 5 DP</small>
-          </button>
-          <button data-upgrade="defense">
-            <strong>Defense</strong>
-            <span>Pristine Guard I</span>
-            <small>Damage taken -1. Cost: 5 DP</small>
-          </button>
-          <button data-upgrade="health">
-            <strong>Health</strong>
-            <span>Soul Light I</span>
-            <small>Maximum health +5. Cost: 5 DP</small>
-          </button>
-          <button data-upgrade="lifeSteal">
-            <strong>Life Steal</strong>
-            <span>Soul Siphon I</span>
-            <small>Attacks restore health. Cost: 10 DP</small>
-          </button>
-          <button data-upgrade="greaterHealth">
-            <strong>Greater Health</strong>
-            <span>Greater Soul Light</span>
-            <small>More health and stronger Heal. Cost: 10 DP</small>
-          </button>
-          <button data-upgrade="greaterDamage">
-            <strong>Greater Damage</strong>
-            <span>Radiant Force II</span>
-            <small>Restore power +2. Cost: 10 DP</small>
-          </button>
-          <button data-upgrade="magic">
-            <strong>Magic</strong>
-            <span>Split Spellcraft</span>
-            <small>Attack becomes spellcasting. Cost: 10 DP</small>
-          </button>
-          <button data-upgrade="greaterDefense">
-            <strong>Greater Defense</strong>
-            <span>Pristine Guard II</span>
-            <small>More defense and stronger Defend. Cost: 10 DP</small>
-          </button>
-          <button data-upgrade="thorns">
-            <strong>Thorns</strong>
-            <span>Pristine Thorns</span>
-            <small>Attackers take recoil. Cost: 10 DP</small>
-          </button>
+          <div class="tree-connectors tree-connectors-branches" aria-hidden="true">
+            <i></i><i></i><i></i>
+          </div>
+
+          <div class="tree-row tree-row-core">
+            <button class="tree-node node-core path-damage" data-upgrade="damage">
+              <strong>A</strong>
+              <span>Attack Upgrade</span>
+              <small>Restore power +1. Cost: 5 DP</small>
+            </button>
+            <button class="tree-node node-core path-health" data-upgrade="health">
+              <strong>H</strong>
+              <span>Health Upgrade</span>
+              <small>Maximum health +5. Cost: 5 DP</small>
+            </button>
+            <button class="tree-node node-core path-defense" data-upgrade="defense">
+              <strong>D</strong>
+              <span>Defense Upgrade</span>
+              <small>Damage taken -1. Cost: 5 DP</small>
+            </button>
+          </div>
+
+          <div class="tree-connectors tree-connectors-base" aria-hidden="true">
+            <i></i><i></i><i></i>
+          </div>
+
+          <div class="tree-row tree-row-base">
+            <div class="tree-node node-base">
+              <strong>B</strong>
+              <span>Base Stats</span>
+              <small>Attack 5 | Defense 3 | Health 20</small>
+            </div>
+          </div>
         </div>
 
         <p id="upgrade-message">Restore controlled cubes to earn points.</p>
