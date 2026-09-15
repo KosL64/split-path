@@ -1,0 +1,15 @@
+WOW! i can finally beat the lv 1 enemy! now i die to the lv 6 enemy... small features changelog btw. 
+
+1. so... all the enemies are still the same. can you make them into controlled souls? a controlled soul, it is basically a cube, but its in the air flying and has a sadder face expression. its stronger by a bit. so... a souls stats are basically just 1.5 times the OG stats. if you get a decimal for a stat, round it (nearest ones place). they also should have a different battle sprite. ALSO THERE SHOULD BE 5 IN SYLVAN, 8 IN AZURE APEX, AND 14 IN CONTROLLED PLAINS!
+
+2. Make the upgrades a bit stronger. so... for all the lv 1 upgrades, make it +5 (insert core upgrade). Health is good btw. 
+
+3. i don't know how it works because i still die to the lv 6 enemy, but for now, can Sylvan village be active? add all the restored enemies there and make them disappear from the area and go to there respective village. also add Azure village and make the enemies from Azure Apex go there once purified. 
+
+4. so... when your in the divine path, just say the name of the upgrade and how many divine points it costs. if you hover over the upgrade with the mouse curser, then show what the upgrade does (small little box next to it).
+
+5. This should be the first area. like... before sylvan. Pristine castle. its basically the tutorial area, don't have enemies, don't have ANYTHING accept for small readable signs that that can give "advice" from the magical light who created this world (don't include anything talking about the light, just remember that part).
+
+6. so... to get to Pristine castle, have a new path from sylvan but make it go up instead of right. have the player spawn INSIDE of Pristine castle and leave it to enter the "overworld" (the map).
+
+7. Add the final boss. he should be stationary at the middle of the controlled palace. he is special. he has dialogue before you fight him. He should say "Ah king... your here at last. Your probably wondering who i am aren't you? well... its... Kyle! if you fight him before beating any level 25 of above enemies, then he should have unique dialogue. he should say "OH? who are you? no matter, ill just kill you anyways." 
