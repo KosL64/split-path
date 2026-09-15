@@ -125,6 +125,36 @@ const kingdomMap = {
   ]
 };
 
+const rockAssetPath = "img/assets/rocks/Objects_separately";
+const enhancedRockAreas = new Set(["sylvan", "azureApex"]);
+const rockSpriteFiles = {
+  sylvan: {
+    large: ["Rock1_grass_shadow1.png", "Rock2_grass_shadow2.png", "Rock4_grass_shadow3.png"],
+    medium: ["Rock5_grass_shadow1.png", "Rock6_grass_shadow2.png", "Rock1_grass_shadow4.png"],
+    small: ["Rock2_grass_shadow5.png", "Rock4_grass_shadow5.png", "Rock6_grass_shadow5.png"]
+  },
+  azureApex: {
+    large: ["Rock8_1.png", "Rock7_1.png", "Rock4_1.png"],
+    medium: ["Rock8_3.png", "Rock7_3.png", "Rock4_3.png"],
+    small: ["Rock8_5.png", "Rock7_5.png", "Rock4_5.png"]
+  }
+};
+const rockSprites = Object.fromEntries(
+  Object.entries(rockSpriteFiles).map(([areaId, sizes]) => [
+    areaId,
+    Object.fromEntries(
+      Object.entries(sizes).map(([size, files]) => [
+        size,
+        files.map((fileName) => {
+          const image = new Image();
+          image.src = `${rockAssetPath}/${fileName}`;
+          return image;
+        })
+      ])
+    )
+  ])
+);
+
 const areas = {
   sylvan: {
     name: "Sylvan",
@@ -206,7 +236,68 @@ function makePreviewArea(name, hasEnemies) {
   };
 }
 
+initializeAreaRockDecorations();
 initializeAreaEnemies();
+
+function initializeAreaRockDecorations() {
+  enhancedRockAreas.forEach((areaId) => {
+    const area = areas[areaId];
+    if (!area) return;
+    area.rockDecorations = buildRockDecorations(area, areaId);
+  });
+}
+
+function buildRockDecorations(area, areaId) {
+  const decorations = [];
+  const occupied = new Set();
+  const isRock = (x, y) => area.map[y]?.[x] === "R";
+  const keyFor = (x, y) => `${x},${y}`;
+
+  area.map.forEach((row, y) => {
+    [...row].forEach((tile, x) => {
+      if (tile !== "R" || occupied.has(keyFor(x, y))) return;
+
+      let width = 1;
+      let height = 1;
+      let size = "small";
+
+      if (isRock(x + 1, y) && isRock(x, y + 1) && isRock(x + 1, y + 1)) {
+        width = 2;
+        height = 2;
+        size = "large";
+      } else if (isRock(x + 1, y)) {
+        width = 2;
+        size = "medium";
+      } else if (isRock(x, y + 1)) {
+        height = 2;
+        size = "medium";
+      }
+
+      for (let rowOffset = 0; rowOffset < height; rowOffset += 1) {
+        for (let colOffset = 0; colOffset < width; colOffset += 1) {
+          occupied.add(keyFor(x + colOffset, y + rowOffset));
+        }
+      }
+
+      decorations.push({
+        x,
+        y,
+        width,
+        height,
+        size,
+        image: pickRockSprite(areaId, size, x, y)
+      });
+    });
+  });
+
+  return decorations;
+}
+
+function pickRockSprite(areaId, size, x, y) {
+  const sprites = rockSprites[areaId]?.[size] || [];
+  if (!sprites.length) return null;
+  return sprites[Math.abs((x * 17 + y * 31 + size.length) % sprites.length)];
+}
 
 function initializeAreaEnemies() {
   Object.entries(areaEnemyGoals).forEach(([areaId, count]) => {
@@ -1054,15 +1145,16 @@ function drawAreaMap() {
 
   for (let row = startRow; row <= endRow; row += 1) {
     for (let col = startCol; col <= endCol; col += 1) {
-      drawTile(area.map[row]?.[col], col * config.tileSize - cameraX, row * config.tileSize - cameraY, area.healed);
+      drawTile(area.map[row]?.[col], col * config.tileSize - cameraX, row * config.tileSize - cameraY, area.healed, currentAreaId);
     }
   }
 
+  drawAreaRocks(area, cameraX, cameraY);
   area.enemies.forEach((enemy) => drawEnemy(enemy, cameraX, cameraY));
   drawMapLabel(area.name, "Explore the area. Step on the glowing exit to return.");
 }
 
-function drawTile(tile, x, y, healed) {
+function drawTile(tile, x, y, healed, areaId) {
   const size = config.tileSize;
   ctx.fillStyle = healed ? "#496f59" : "#393944";
   ctx.fillRect(x, y, size, size);
@@ -1078,7 +1170,7 @@ function drawTile(tile, x, y, healed) {
     drawTree(x + 10, y + 5, 0.72);
   }
 
-  if (tile === "R") {
+  if (tile === "R" && !enhancedRockAreas.has(areaId)) {
     ctx.fillStyle = "#6b6576";
     ctx.fillRect(x + 4, y + 8, size - 8, size - 12);
     ctx.strokeStyle = "#34313b";
@@ -1117,6 +1209,45 @@ function drawTile(tile, x, y, healed) {
   ctx.strokeStyle = "rgba(243,238,225,.05)";
   ctx.lineWidth = 1;
   ctx.strokeRect(x, y, size, size);
+}
+
+function drawAreaRocks(area, cameraX, cameraY) {
+  const decorations = area.rockDecorations || [];
+
+  decorations.forEach((rock) => {
+    const worldX = rock.x * config.tileSize;
+    const worldY = rock.y * config.tileSize;
+    const boundsWidth = rock.width * config.tileSize;
+    const boundsHeight = rock.height * config.tileSize;
+    if (worldX + boundsWidth < cameraX || worldX > cameraX + canvas.width) return;
+    if (worldY + boundsHeight < cameraY || worldY > cameraY + canvas.height) return;
+
+    const drawSize = rockDrawSize(rock);
+    const drawX = worldX - cameraX + (boundsWidth - drawSize.width) / 2;
+    const drawY = worldY - cameraY + boundsHeight - drawSize.height - 4;
+
+    if (rock.image?.complete && rock.image.naturalWidth > 0) {
+      ctx.drawImage(rock.image, drawX, drawY, drawSize.width, drawSize.height);
+    } else {
+      drawFallbackRock(drawX, drawY, drawSize.width, drawSize.height);
+    }
+  });
+}
+
+function rockDrawSize(rock) {
+  if (rock.size === "large") return { width: 86, height: 82 };
+  if (rock.width > rock.height) return { width: 68, height: 54 };
+  if (rock.height > rock.width) return { width: 54, height: 68 };
+  if (rock.size === "medium") return { width: 58, height: 58 };
+  return { width: 38, height: 38 };
+}
+
+function drawFallbackRock(x, y, width, height) {
+  ctx.fillStyle = "#6b6576";
+  ctx.fillRect(x + 4, y + 6, width - 8, height - 10);
+  ctx.strokeStyle = "#34313b";
+  ctx.lineWidth = 3;
+  ctx.strokeRect(x + 4, y + 6, width - 8, height - 10);
 }
 
 function drawPlayer() {
