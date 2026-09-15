@@ -1,9 +1,11 @@
-ok ok ok... first off... I'm sorry but this is horrible. HERES HOW TO MAKE IT BETTER :)
+hey this is good! some changes still need to be made before i ask for the major changes. also... this changelog is basically just about the player and the divine path. 
 
-1. change the names of everything. pristine clearing should be called Sylvan. quiet village should be called Sylvan village, old ruins should be called Azure Apex, old grove should be called controlled plains and by the way... the shadow tower should the controlled palace. 
+1. i forgot to talk about the player's base stats. the players health is good, 20 Hp. Attack should actually be 5, and defense should be 3.   
 
-2. the areas aren't locked off so... you don't need to do anything to enter another place, UNLESS ITS A VILLAGE! villages should be locked until their respective area is cleared. like... after you clear Sylvan, sylvan village becomes available. 
+2. btw... if the player upgrades health, then upgrades life steal... they can't chose to upgrade health higher and a stronger heal button. same as the other core paths. only 1 10 divine point upgrade can be chose per path. and of course... the 3 paths are health, damage, and defense.
 
-3. make the character (player) look like how they originally looked like. the character (player) now, looks like some small squishable bug that you notice crawling around. make them taller, and have a light yellow robe on. (no hands by the way). also, the character (player) looks like they have bug antenna's, make the "antenna's" look more like yellow antlers instead of bug antenna's.  
+3. i should of said this earlier last change log, but whenever an upgrade is purchased, its respective stat that it upgrades increases. so... if you upgrade damage, you choose magic or greater damage, the attack stat will increase by 3. if you choose, say, life steal instead of greater heal button and higher health, health will rise by 3. if you choose thorns instead of defense, defense will increase by 3. and even if you chose the greater health, attack, and defense, the respective stat will increase by 3. 
 
-4. add more enemies. Sylvan should have 20 enemies, Azure apex should have 31, and controlled plains should have 55 (remember, you dont have to restore EVERY enemy to unlock a new area (unless its a village)).
+4. Make sprint a bit slower. its too fast when you just run around.
+
+5. (big change) so... i still haven't actually beat the lv 1 enemy yet XD so... idk how it works. otherwise... can you format the divine path differently? I'm gonna send a picture don't worry.
