@@ -1,6 +1,6 @@
 WOW! i can finally beat the lv 1 enemy! now i die to the lv 6 enemy... small features changelog btw. 
 
-1. so... all the enemies are still the same. can you make them into controlled souls? a controlled soul, it is basically a cube, but its in the air flying and has a sadder face expression. its stronger by a bit. so... a souls stats are basically just 1.5 times the OG stats. if you get a decimal for a stat, round it (nearest ones place). they also should have a different battle sprite. ALSO THERE SHOULD BE 5 IN SYLVAN, 8 IN AZURE APEX, AND 14 IN CONTROLLED PLAINS!
+1. so... all the enemies are still the same. can you make them into controlled souls? a controlled soul, it is basically a cube, but its in the air flying and has a sadder face expression. its stronger by a bit. so... a souls stats are basically just 1.5 times the OG stats. if you get a decimal for a stat, round it (nearest ones place). they also should have a different battle sprite. ALSO THERE SHOULD BE 5 IN SYLVAN, 8 IN AZURE APEX, AND 14 IN CONTROLLED PLAINS! (replace the normal cubes with souls).
 
 2. Make the upgrades a bit stronger. so... for all the lv 1 upgrades, make it +5 (insert core upgrade). Health is good btw. 
 
@@ -13,3 +13,5 @@ WOW! i can finally beat the lv 1 enemy! now i die to the lv 6 enemy... small fea
 6. so... to get to Pristine castle, have a new path from sylvan but make it go up instead of right. have the player spawn INSIDE of Pristine castle and leave it to enter the "overworld" (the map).
 
 7. Add the final boss. he should be stationary at the middle of the controlled palace. He should be level 100 he is special btw. he has dialogue before you fight him. He should say (a new text box after every period BUT NOT AFTER "...") "Ah king... your here at last. Your probably wondering who i am aren't you? well... its ???. But you can call me Kyle!" if you fight him before beating any level 25 of above enemies, then he should have unique dialogue. he should say "OH? who are you? no matter, ill just kill you anyways." 
+
+8. so... if and when you chose magic, a magic button will show up with 2 other buttons. when you press magic, then it should show the 2 attacks and pressing magic again will close the "magic menu" (makes the 2 spells disappear).
