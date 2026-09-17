@@ -48,6 +48,12 @@ const areaLevelRanges = {
   controlledPlains: { min: 50, max: 100 }
 };
 
+const soulLevelRanges = {
+  sylvan: { min: 11, max: 20 },
+  azureApex: { min: 40, max: 50 },
+  controlledPlains: { min: 70, max: 100 }
+};
+
 const playerState = {
   divinePoints: 0,
   health: 20,
@@ -127,6 +133,16 @@ const kingdomMap = {
 
 const rockAssetPath = "img/assets/rocks/Objects_separately";
 const enhancedRockAreas = new Set(["sylvan", "azureApex"]);
+let sylvanGrassPattern = null;
+const sylvanGrass = new Image();
+sylvanGrass.onload = () => {
+  const tile = document.createElement("canvas");
+  tile.width = 192;
+  tile.height = 108;
+  tile.getContext("2d").drawImage(sylvanGrass, 0, 0, tile.width, tile.height);
+  sylvanGrassPattern = ctx.createPattern(tile, "repeat");
+};
+sylvanGrass.src = "img/assets/sylvan/grass.jpg";
 const sylvanSprites = Object.fromEntries(
   ["rockWide", "rockLarge", "rockSmall", "tree", "ground", "flying"].map((name) => {
     const image = new Image();
@@ -327,12 +343,22 @@ function createEnemiesForArea(area, count, seedText) {
   const levelRange = areaLevelRanges[seedText] || { min: 1, max: 1 };
 
   return orderedPositions.slice(0, count).map((position, index) => {
-    const level = levelForEnemy(index, count, levelRange);
+    const visual = index % 4 === 3 ? "flying" : "ground";
+    const level = visual === "flying"
+      ? levelForEnemy(Math.floor(index / 4), Math.floor(count / 4), soulLevelRanges[seedText] || levelRange)
+      : levelForEnemy(index, count, levelRange);
     const stats = statsForLevel(level);
 
     return {
       id: `${seedText}-cube-${index + 1}`,
-      visual: seedText === "sylvan" && index % 4 === 3 ? "flying" : "ground",
+      visual,
+      facing: 1,
+      talked: false,
+      chasing: false,
+      route: [],
+      routeUntil: 0,
+      spawnX: position.x * config.tileSize + 7,
+      spawnY: position.y * config.tileSize + 5,
       level,
       attack: stats.attack,
       defense: stats.defense,
@@ -478,6 +504,11 @@ function enterArea(areaId) {
 }
 
 function leaveArea() {
+  areas[currentAreaId].enemies.forEach((enemy) => {
+    enemy.chasing = false;
+    enemy.route = [];
+    enemy.routeUntil = 0;
+  });
   enterKingdom();
   setPrompt("");
 }
@@ -543,6 +574,19 @@ function moveEnemies() {
 function moveEnemy(enemy) {
   const now = performance.now();
 
+  if (enemy.visual === "flying" && now >= contactLockedUntil) {
+    const size = config.tileSize;
+    const playerCol = Math.floor((player.x + player.width / 2) / size);
+    const playerRow = Math.floor((player.y + player.height / 2) / size);
+    const enemyCol = Math.floor((enemy.x + enemy.width / 2) / size);
+    const enemyRow = Math.floor((enemy.y + enemy.height / 2) / size);
+    if (Math.abs(playerCol - enemyCol) <= 1 && Math.abs(playerRow - enemyRow) <= 1) enemy.chasing = true;
+    if (enemy.chasing) {
+      chasePlayer(enemy, now);
+      return;
+    }
+  }
+
   if (now < enemy.waitUntil) return;
 
   if (now >= enemy.movingUntil) {
@@ -565,6 +609,79 @@ function moveEnemy(enemy) {
 
   enemy.x = next.x;
   enemy.y = next.y;
+  if (enemy.moveX) enemy.facing = Math.sign(enemy.moveX);
+}
+
+function chasePlayer(enemy, now) {
+  const size = config.tileSize;
+  const goal = {
+    x: Math.floor((player.x + player.width / 2) / size),
+    y: Math.floor((player.y + player.height / 2) / size)
+  };
+  const goalKey = `${goal.x},${goal.y}`;
+  const atTileCenter = Math.abs((enemy.x - 7) / size - Math.round((enemy.x - 7) / size)) < 0.001
+    && Math.abs((enemy.y - 5) / size - Math.round((enemy.y - 5) / size)) < 0.001;
+  if ((!enemy.route.length && now >= enemy.routeUntil)
+    || (atTileCenter && now >= enemy.routeUntil && enemy.routeGoal !== goalKey)) {
+    enemy.route = findEnemyRoute(enemy, goal);
+    enemy.routeGoal = goalKey;
+    enemy.routeUntil = now + 400;
+  }
+  const target = enemy.route[0];
+  if (!target) return;
+  const dx = target.x - enemy.x;
+  const dy = target.y - enemy.y;
+  const distance = Math.hypot(dx, dy);
+  const speed = 0.8;
+  const next = { ...enemy };
+  if (distance <= speed) {
+    next.x = target.x;
+    next.y = target.y;
+    enemy.route.shift();
+  } else {
+    next.x += dx / distance * speed;
+    next.y += dy / distance * speed;
+  }
+  if (collidesWithBlockedTile(next)) {
+    enemy.routeUntil = 0;
+    return;
+  }
+  if (Math.abs(dx) > 0.1) enemy.facing = Math.sign(dx);
+  enemy.x = next.x;
+  enemy.y = next.y;
+}
+
+function findEnemyRoute(enemy, goal) {
+  const area = areas[currentAreaId];
+  const size = config.tileSize;
+  const start = {
+    x: Math.floor((enemy.x + enemy.width / 2) / size),
+    y: Math.floor((enemy.y + enemy.height / 2) / size)
+  };
+  const key = (tile) => `${tile.x},${tile.y}`;
+  const startKey = key(start);
+  const goalKey = key(goal);
+  const queue = [start];
+  const parents = new Map([[startKey, null]]);
+  // Four-direction breadth-first search finds the shortest traversable tile route.
+  for (let cursor = 0; cursor < queue.length && !parents.has(goalKey); cursor += 1) {
+    const tile = queue[cursor];
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const next = { x: tile.x + dx, y: tile.y + dy };
+      if (parents.has(key(next)) || isBlockedTile(area.map[next.y]?.[next.x])) continue;
+      parents.set(key(next), tile);
+      queue.push(next);
+    }
+  }
+  if (!parents.has(goalKey)) return [];
+  const route = [];
+  for (let tile = goal; tile; tile = parents.get(key(tile))) {
+    route.unshift({ x: tile.x * size + 7, y: tile.y * size + 5 });
+  }
+  // Center within the starting tile before turning through narrow passages.
+  if (route.length === 1) return [{ x: player.x + (player.width - enemy.width) / 2,
+    y: player.y + (player.height - enemy.height) / 2 }];
+  return route;
 }
 
 function chooseEnemyDirection(enemy) {
@@ -630,7 +747,7 @@ function updateInteractionPrompt() {
   }
 
   if (gameMode === "area") {
-    const enemy = nearestEnemy();
+    const enemy = nearestEnemy(true);
     if (enemy && enemy.restored && distanceToRect(enemy) < 78) {
       activeEnemy = enemy;
       promptMode = "talk";
@@ -661,9 +778,13 @@ function setPrompt(text) {
   prompt.classList.toggle("hidden", !text);
 }
 
-function nearestEnemy() {
+function nearestEnemy(restoredOnly = false) {
   const area = areas[currentAreaId];
-  return area.enemies.find((enemy) => distanceToRect(enemy) < 96) || null;
+  return area.enemies.reduce((nearest, enemy) => {
+    if (restoredOnly && !enemy.restored) return nearest;
+    const distance = distanceToRect(enemy);
+    return distance < 96 && (!nearest || distance < distanceToRect(nearest)) ? enemy : nearest;
+  }, null);
 }
 
 function distanceToRect(rect) {
@@ -690,8 +811,8 @@ function tileAt(worldX, worldY) {
 
 function checkAreaEncounters() {
   if (gameMode !== "area" || performance.now() < contactLockedUntil) return;
-  const enemy = nearestEnemy();
-  if (enemy && !enemy.restored && rectanglesOverlap(player, enemy)) startBattle(enemy);
+  const enemy = areas[currentAreaId].enemies.find((candidate) => !candidate.restored && rectanglesOverlap(player, candidate));
+  if (enemy) startBattle(enemy);
 }
 
 function startBattle(enemy) {
@@ -701,7 +822,9 @@ function startBattle(enemy) {
   battleDefending = false;
   enemy.control = enemy.controlMax;
   document.querySelector("#battle-enemy").classList.remove("restored");
-  document.querySelector("#battle-message").textContent = `A level ${enemy.level} controlled cube lashes out. Purify it with your attacks.`;
+  document.querySelector("#battle-message").textContent = enemy.visual === "flying"
+    ? `A lv ${enemy.level} controlled soul spotted you.`
+    : `A level ${enemy.level} controlled cube lashes out. Purify it with your attacks.`;
   updateBattleActions();
   showScreen("battle");
   updateBattleStats();
@@ -792,6 +915,16 @@ function revivePlayerAtAreaStart() {
   playerState.health = playerState.maxHealth;
   player.x = area.start.x * config.tileSize + 6;
   player.y = area.start.y * config.tileSize + 2;
+  area.enemies.forEach((enemy) => {
+    if (enemy.chasing) {
+      enemy.x = enemy.spawnX;
+      enemy.y = enemy.spawnY;
+    }
+    enemy.chasing = false;
+    enemy.route = [];
+    enemy.routeUntil = 0;
+    enemy.movingUntil = 0;
+  });
   contactLockedUntil = performance.now() + config.contactCooldown * 2;
   updateHud();
   showScreen("game");
@@ -1051,6 +1184,13 @@ function resetGame() {
       enemy.moveY = 0;
       enemy.movingUntil = 0;
       enemy.waitUntil = 0;
+      enemy.chasing = false;
+      enemy.route = [];
+      enemy.routeUntil = 0;
+      enemy.talked = false;
+      enemy.facing = 1;
+      enemy.x = enemy.spawnX;
+      enemy.y = enemy.spawnY;
     });
   });
   kingdomMap.nodes.forEach((node) => {
@@ -1156,6 +1296,16 @@ function drawAreaMap() {
   const startRow = Math.floor(cameraY / config.tileSize);
   const endRow = Math.ceil((cameraY + canvas.height) / config.tileSize);
 
+  if (currentAreaId === "sylvan" && sylvanGrassPattern) {
+    ctx.save();
+    ctx.translate(-cameraX, -cameraY);
+    ctx.fillStyle = sylvanGrassPattern;
+    ctx.fillRect(cameraX, cameraY, canvas.width, canvas.height);
+    ctx.restore();
+    ctx.fillStyle = area.healed ? "rgba(0,0,0,.04)" : "rgba(0,0,0,.18)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
   for (let row = startRow; row <= endRow; row += 1) {
     for (let col = startCol; col <= endCol; col += 1) {
       drawTile(area.map[row]?.[col], col * config.tileSize - cameraX, row * config.tileSize - cameraY, area.healed, currentAreaId);
@@ -1169,17 +1319,18 @@ function drawAreaMap() {
 
 function drawTile(tile, x, y, healed, areaId) {
   const size = config.tileSize;
+  const grassy = areaId === "sylvan" && sylvanGrassPattern;
   ctx.fillStyle = healed ? "#496f59" : "#393944";
-  ctx.fillRect(x, y, size, size);
+  if (!grassy) ctx.fillRect(x, y, size, size);
 
   if (tile === "^") {
     ctx.fillStyle = "#181820";
-    ctx.fillRect(x, y, size, size);
+    if (!grassy) ctx.fillRect(x, y, size, size);
   }
 
   if (tile === "T") {
     ctx.fillStyle = healed ? "#315b3e" : "#252934";
-    ctx.fillRect(x, y, size, size);
+    if (!grassy) ctx.fillRect(x, y, size, size);
     if (areaId === "sylvan" && readySylvanSprite("tree")) {
       ctx.drawImage(sylvanSprites.tree, x + 3, y - 16, size - 6, size + 16);
     } else {
@@ -1225,7 +1376,7 @@ function drawTile(tile, x, y, healed, areaId) {
 
   ctx.strokeStyle = "rgba(243,238,225,.05)";
   ctx.lineWidth = 1;
-  ctx.strokeRect(x, y, size, size);
+  if (!grassy) ctx.strokeRect(x, y, size, size);
 }
 
 function drawAreaRocks(area, cameraX, cameraY) {
@@ -1464,7 +1615,9 @@ function drawEnemy(enemy, cameraX, cameraY) {
       ctx.shadowColor = "#f2c95f";
       ctx.shadowBlur = 12;
     }
-    ctx.drawImage(sprite, x - 3, y + enemy.height - height - hover, width, height);
+    ctx.translate(x + enemy.width / 2, y + enemy.height - height - hover);
+    ctx.scale(enemy.facing || 1, 1);
+    ctx.drawImage(sprite, -width / 2, 0, width, height);
     ctx.restore();
     ctx.font = "800 12px Trebuchet MS";
     ctx.fillStyle = enemy.restored ? "#f2c95f" : "#f3eee1";
@@ -1472,6 +1625,11 @@ function drawEnemy(enemy, cameraX, cameraY) {
     return;
   }
 
+  ctx.save();
+  if (enemy.facing === -1) {
+    ctx.translate(2 * x + enemy.width, 0);
+    ctx.scale(-1, 1);
+  }
   ctx.save();
   ctx.shadowColor = enemy.restored ? "rgba(242,201,95,.8)" : "rgba(221,108,123,.8)";
   ctx.shadowBlur = 18;
@@ -1489,6 +1647,7 @@ function drawEnemy(enemy, cameraX, cameraY) {
   roundRect(x + 24, y + 14, 5, 12, 3);
   ctx.fill();
 
+  ctx.restore();
   if (enemy.restored) {
     ctx.font = "700 14px Trebuchet MS";
     ctx.fillStyle = "#f2c95f";
@@ -1580,7 +1739,14 @@ function gameLoop(time) {
 function talkToNpc() {
   if (currentScreen === "game" && promptMode === "talk") {
     dialogueUntil = performance.now() + 4500;
-    setPrompt("What happened? Hello? Who are you? Well... either way, thanks for saving me.");
+    if (activeEnemy?.visual === "flying") {
+      setPrompt(activeEnemy.talked
+        ? "hey... you look kind of familiar. I don't know. probably just my head."
+        : "Huff... what happened?");
+      activeEnemy.talked = true;
+    } else {
+      setPrompt("What happened? Hello? Who are you? Well... either way, thanks for saving me.");
+    }
     window.setTimeout(updateInteractionPrompt, 4500);
   }
 }
