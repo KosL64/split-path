@@ -127,6 +127,18 @@ const kingdomMap = {
 
 const rockAssetPath = "img/assets/rocks/Objects_separately";
 const enhancedRockAreas = new Set(["sylvan", "azureApex"]);
+const sylvanSprites = Object.fromEntries(
+  ["rockWide", "rockLarge", "rockSmall", "tree", "ground", "flying"].map((name) => {
+    const image = new Image();
+    image.src = `img/assets/sylvan/${name}.png`;
+    return [name, image];
+  })
+);
+
+function readySylvanSprite(name) {
+  const sprite = sylvanSprites[name];
+  return sprite?.complete && sprite.naturalWidth > 0 ? sprite : null;
+}
 const rockSpriteFiles = {
   sylvan: {
     large: ["Rock1_grass_shadow1.png", "Rock2_grass_shadow2.png", "Rock4_grass_shadow3.png"],
@@ -265,10 +277,10 @@ function buildRockDecorations(area, areaId) {
         width = 2;
         height = 2;
         size = "large";
-      } else if (isRock(x + 1, y)) {
+      } else if (areaId !== "sylvan" && isRock(x + 1, y)) {
         width = 2;
         size = "medium";
-      } else if (isRock(x, y + 1)) {
+      } else if (areaId !== "sylvan" && isRock(x, y + 1)) {
         height = 2;
         size = "medium";
       }
@@ -320,6 +332,7 @@ function createEnemiesForArea(area, count, seedText) {
 
     return {
       id: `${seedText}-cube-${index + 1}`,
+      visual: seedText === "sylvan" && index % 4 === 3 ? "flying" : "ground",
       level,
       attack: stats.attack,
       defense: stats.defense,
@@ -1167,7 +1180,11 @@ function drawTile(tile, x, y, healed, areaId) {
   if (tile === "T") {
     ctx.fillStyle = healed ? "#315b3e" : "#252934";
     ctx.fillRect(x, y, size, size);
-    drawTree(x + 10, y + 5, 0.72);
+    if (areaId === "sylvan" && readySylvanSprite("tree")) {
+      ctx.drawImage(sylvanSprites.tree, x + 3, y - 16, size - 6, size + 16);
+    } else {
+      drawTree(x + 10, y + 5, 0.72);
+    }
   }
 
   if (tile === "R" && !enhancedRockAreas.has(areaId)) {
@@ -1223,6 +1240,17 @@ function drawAreaRocks(area, cameraX, cameraY) {
     if (worldY + boundsHeight < cameraY || worldY > cameraY + canvas.height) return;
 
     const drawSize = rockDrawSize(rock);
+    if (currentAreaId === "sylvan") {
+      const spriteName = rock.size === "large" ? "rockLarge" : ((rock.x + rock.y) % 2 ? "rockSmall" : "rockWide");
+      const sprite = readySylvanSprite(spriteName);
+      if (sprite) {
+        const spriteWidth = rock.size === "large" ? boundsWidth - 6 : boundsWidth - 8;
+        const spriteHeight = spriteWidth * sprite.height / sprite.width;
+        ctx.drawImage(sprite, worldX - cameraX + (boundsWidth - spriteWidth) / 2,
+          worldY - cameraY + boundsHeight - spriteHeight - 3, spriteWidth, spriteHeight);
+        return;
+      }
+    }
     const drawX = worldX - cameraX + (boundsWidth - drawSize.width) / 2;
     const drawY = worldY - cameraY + boundsHeight - drawSize.height - 4;
 
@@ -1420,6 +1448,29 @@ function drawPlayer() {
 function drawEnemy(enemy, cameraX, cameraY) {
   const x = enemy.x - cameraX;
   const y = enemy.y - cameraY;
+
+  const sprite = currentAreaId === "sylvan" ? readySylvanSprite(enemy.visual) : null;
+  if (sprite) {
+    const flying = enemy.visual === "flying";
+    const width = enemy.width + 6;
+    const height = width * sprite.height / sprite.width;
+    const hover = flying ? 12 + Math.sin(performance.now() / 260 + enemy.level) * 3 : 0;
+    ctx.save();
+    ctx.fillStyle = "rgba(0,0,0,.28)";
+    ctx.beginPath();
+    ctx.ellipse(x + enemy.width / 2, y + enemy.height - 2, flying ? 16 : 13, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    if (enemy.restored) {
+      ctx.shadowColor = "#f2c95f";
+      ctx.shadowBlur = 12;
+    }
+    ctx.drawImage(sprite, x - 3, y + enemy.height - height - hover, width, height);
+    ctx.restore();
+    ctx.font = "800 12px Trebuchet MS";
+    ctx.fillStyle = enemy.restored ? "#f2c95f" : "#f3eee1";
+    ctx.fillText(enemy.restored ? "..." : `Lv ${enemy.level}`, x - 2, y + enemy.height - height - hover - 8);
+    return;
+  }
 
   ctx.save();
   ctx.shadowColor = enemy.restored ? "rgba(242,201,95,.8)" : "rgba(221,108,123,.8)";
