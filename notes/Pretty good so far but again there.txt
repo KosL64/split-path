@@ -1,0 +1,11 @@
+Pretty good so far but again there is some changes that i still want to be made before the map update. (small update)
+
+1. so... if you encounter a soul, it says a lv # controlled cube lashes out and so on and so on. make it say a lv # controlled soul spotted you. 
+
+2. make the souls for Sylvan be lv 11 or higher. make the souls for Azure Apex be lv 40 or above. and make the souls for controlled plains be lv 70 or above. 
+
+3. make the souls agro on to the player. basically, if the player is in a souls like... area (the 9 spaces around it) then it will chase the player until it starts a battle.
+
+4. give the souls different dialogue. make them say "Huff... what happened?" and then if you talk to them after you talk to them the first time, make them say "hey... you look kind of familiar. I don't know. probably just my head."
+
+5. for the new sprites, when they walk in a direction, they just move that way. if a soul moves left... its face still is looking right. Can you make it that if a cube (and the souls) moves left, then it looks left and if it moves right then it looks right (by looks i mean faces that direction). 
