@@ -527,6 +527,7 @@ meter {
 }
 
 .tree-node {
+  position: relative;
   min-height: 0;
   display: grid;
   justify-items: center;
@@ -535,6 +536,48 @@ meter {
   border-radius: 999px;
   aspect-ratio: 1;
   padding: 12px;
+}
+
+.tree-node[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  z-index: 5;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  width: 190px;
+  transform: translateX(-50%);
+  border: 2px solid var(--gold);
+  border-radius: 6px;
+  padding: 9px 10px;
+  background: #17161b;
+  color: var(--ink);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.tree-node[data-tooltip]:hover::after,
+.tree-node[data-tooltip]:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+}
+
+.enemy-cube.boss-cube {
+  border: 0;
+  border-radius: 0;
+  background-color: transparent;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+  box-shadow: none;
+}
+
+.enemy-cube.boss-cube::before,
+.enemy-cube.boss-cube::after {
+  display: none;
 }
 
 .tree-node strong {

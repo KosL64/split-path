@@ -102,6 +102,10 @@ let dialogueUntil = 0;
 let promptMode = "";
 let activeEnemy = null;
 let activeNode = null;
+let activeSign = null;
+let bossDialogue = [];
+let bossDialogueIndex = 0;
+let magicMenuOpen = false;
 
 const storySlides = [
   { title: "The King", text: "Long ago, the Pristine King watched over the cubes and souls of the land.", image: "img/split-path-lore.png" },
@@ -117,15 +121,19 @@ const kingdomMap = {
   cameraX: 0,
   cameraY: 0,
   paths: [
+    [[180, 260], [180, 520]],
     [[180, 520], [430, 520], [620, 390], [860, 390]],
+    [[620, 390], [820, 270], [1050, 250]],
     [[430, 520], [520, 720], [760, 770], [1010, 690]],
     [[860, 390], [1100, 370], [1280, 500], [1430, 500]],
     [[1010, 690], [1190, 820], [1440, 760]]
   ],
   nodes: [
+    { id: "pristineCastle", name: "Pristine Castle", x: 180, y: 260, areaId: "pristineCastle", unlocked: true, kind: "castle" },
     { id: "sylvan", name: "Sylvan", x: 180, y: 520, areaId: "sylvan", unlocked: true, kind: "area" },
     { id: "azureApex", name: "Azure Apex", x: 620, y: 390, areaId: "azureApex", unlocked: true, kind: "area" },
-    { id: "sylvanVillage", name: "Sylvan Village", x: 1010, y: 690, areaId: "sylvanVillage", unlocked: false, kind: "village", unlocksAfter: "sylvan" },
+    { id: "azureVillage", name: "Azure Village", x: 1050, y: 250, areaId: "azureVillage", unlocked: true, kind: "village", residentsFrom: "azureApex" },
+    { id: "sylvanVillage", name: "Sylvan Village", x: 1010, y: 690, areaId: "sylvanVillage", unlocked: true, kind: "village", residentsFrom: "sylvan" },
     { id: "controlledPalace", name: "Controlled Palace", x: 1430, y: 500, areaId: "controlledPalace", unlocked: true, kind: "area" },
     { id: "controlledPlains", name: "Controlled Plains", x: 1440, y: 760, areaId: "controlledPlains", unlocked: true, kind: "area" }
   ]
@@ -150,6 +158,52 @@ const sylvanSprites = Object.fromEntries(
     return [name, image];
   })
 );
+
+let kyleSprite = null;
+loadTransparentSprite("img/assets/enemy-kyle-boss/Kyle.png", [190, 42, 205, 270], (sprite) => {
+  kyleSprite = sprite;
+});
+
+function loadTransparentSprite(path, [sourceX, sourceY, width, height], onLoad) {
+  const source = new Image();
+  source.onload = () => {
+    const sprite = document.createElement("canvas");
+    sprite.width = width;
+    sprite.height = height;
+    const spriteContext = sprite.getContext("2d");
+    spriteContext.drawImage(source, sourceX, sourceY, width, height, 0, 0, width, height);
+    const pixels = spriteContext.getImageData(0, 0, width, height);
+    const visited = new Uint8Array(width * height);
+    const queue = [];
+    const enqueue = (index) => {
+      if (visited[index]) return;
+      visited[index] = 1;
+      const offset = index * 4;
+      if (pixels.data[offset] < 240 || pixels.data[offset + 1] < 240 || pixels.data[offset + 2] < 240) return;
+      pixels.data[offset + 3] = 0;
+      queue.push(index);
+    };
+    for (let x = 0; x < width; x += 1) {
+      enqueue(x);
+      enqueue((height - 1) * width + x);
+    }
+    for (let y = 0; y < height; y += 1) {
+      enqueue(y * width);
+      enqueue(y * width + width - 1);
+    }
+    for (let cursor = 0; cursor < queue.length; cursor += 1) {
+      const index = queue[cursor];
+      const x = index % width;
+      if (x > 0) enqueue(index - 1);
+      if (x < width - 1) enqueue(index + 1);
+      if (index >= width) enqueue(index - width);
+      if (index < width * (height - 1)) enqueue(index + width);
+    }
+    spriteContext.putImageData(pixels, 0, 0);
+    onLoad(sprite);
+  };
+  source.src = path;
+}
 
 function readySylvanSprite(name) {
   const sprite = sylvanSprites[name];
@@ -184,6 +238,7 @@ const rockSprites = Object.fromEntries(
 );
 
 const areas = {
+  pristineCastle: makePristineCastle(),
   sylvan: {
     name: "Sylvan",
     width: 36,
@@ -223,10 +278,38 @@ const areas = {
     ]
   },
   azureApex: makePreviewArea("Azure Apex", true),
+  azureVillage: makePreviewArea("Azure Village", false),
   sylvanVillage: makePreviewArea("Sylvan Village", false),
   controlledPalace: makePreviewArea("Controlled Palace", false),
   controlledPlains: makePreviewArea("Controlled Plains", true)
 };
+
+function makePristineCastle() {
+  const width = 24;
+  const height = 16;
+  const grid = Array.from({ length: height }, (_, row) => Array.from({ length: width }, (_, col) =>
+    row === 0 || row === height - 1 || col === 0 || col === width - 1 ? "^" : "."));
+  [[5, 5], [12, 5], [18, 5], [8, 10], [16, 10]].forEach(([x, y]) => { grid[y][x] = "Q"; });
+  grid[height - 2][12] = "E";
+  return {
+    name: "Pristine Castle",
+    width,
+    height,
+    start: { x: 12, y: 8 },
+    cameraX: 0,
+    cameraY: 0,
+    healed: true,
+    enemies: [],
+    signs: {
+      "5,5": "Move with WASD or the arrow keys. Hold Shift or X to sprint.",
+      "12,5": "Press Z or Enter near signs, residents, and map locations.",
+      "18,5": "Restore controlled creatures to earn Divine Points.",
+      "8,10": "Open the Divine Path with U to choose permanent upgrades.",
+      "16,10": "The glowing doorway leads to the Kingdom Map."
+    },
+    map: grid.map((row) => row.join(""))
+  };
+}
 
 function makePreviewArea(name, hasEnemies) {
   return {
@@ -266,6 +349,42 @@ function makePreviewArea(name, hasEnemies) {
 
 initializeAreaRockDecorations();
 initializeAreaEnemies();
+initializeBoss();
+
+function initializeBoss() {
+  const area = areas.controlledPalace;
+  const stats = statsForLevel(100);
+  area.enemies = [{
+    id: "kyle-boss",
+    name: "Kyle",
+    kind: "boss",
+    visual: "boss",
+    originArea: "controlledPalace",
+    level: 100,
+    attack: stats.attack,
+    defense: stats.defense,
+    maxHealth: stats.health,
+    controlMax: stats.health,
+    control: stats.health,
+    x: 15 * config.tileSize + 7,
+    y: 9 * config.tileSize + 5,
+    spawnX: 15 * config.tileSize + 7,
+    spawnY: 9 * config.tileSize + 5,
+    width: 42,
+    height: 48,
+    restored: false,
+    stationary: true,
+    facing: -1,
+    talked: false,
+    chasing: false,
+    route: [],
+    routeUntil: 0,
+    moveX: 0,
+    moveY: 0,
+    movingUntil: 0,
+    waitUntil: 0
+  }];
+}
 
 function initializeAreaRockDecorations() {
   enhancedRockAreas.forEach((areaId) => {
@@ -352,6 +471,7 @@ function createEnemiesForArea(area, count, seedText) {
     return {
       id: `${seedText}-cube-${index + 1}`,
       visual,
+      originArea: seedText,
       facing: 1,
       talked: false,
       chasing: false,
@@ -436,7 +556,7 @@ function showScreen(name) {
 }
 
 function startGame() {
-  enterKingdom();
+  enterArea("pristineCastle");
   showScreen("game");
   if (!animationFrameId) animationFrameId = requestAnimationFrame(gameLoop);
 }
@@ -566,7 +686,7 @@ function moveEnemies() {
   const area = areas[currentAreaId];
 
   area.enemies.forEach((enemy) => {
-    if (enemy.restored) return;
+    if (enemy.restored || enemy.stationary) return;
     moveEnemy(enemy);
   });
 }
@@ -733,7 +853,9 @@ function updateCamera() {
 
 function updateInteractionPrompt() {
   if (performance.now() < dialogueUntil) return;
+  if (promptMode === "boss-dialogue") return;
   activeNode = null;
+  activeSign = null;
   promptMode = "";
 
   if (gameMode === "kingdom") {
@@ -747,11 +869,27 @@ function updateInteractionPrompt() {
   }
 
   if (gameMode === "area") {
-    const enemy = nearestEnemy(true);
-    if (enemy && enemy.restored && distanceToRect(enemy) < 78) {
-      activeEnemy = enemy;
+    const boss = areas[currentAreaId].enemies.find((enemy) => enemy.kind === "boss" && !enemy.restored && distanceToRect(enemy) < 96);
+    if (boss) {
+      activeEnemy = boss;
+      promptMode = "challenge-boss";
+      setPrompt("Press Z to confront Kyle");
+      return;
+    }
+
+    const resident = nearestVillageResident();
+    if (resident) {
+      activeEnemy = resident;
       promptMode = "talk";
       setPrompt("Press Z to talk");
+      return;
+    }
+
+    const sign = nearbySign();
+    if (sign) {
+      activeSign = sign;
+      promptMode = "read-sign";
+      setPrompt("Press Z to read the sign");
       return;
     }
 
@@ -770,6 +908,9 @@ function usePrompt() {
   if (promptMode === "enter-area" && activeNode?.unlocked) enterArea(activeNode.areaId);
   if (promptMode === "leave-area") leaveArea();
   if (promptMode === "talk") talkToNpc();
+  if (promptMode === "read-sign") readSign();
+  if (promptMode === "challenge-boss") beginBossDialogue();
+  if (promptMode === "boss-dialogue") advanceBossDialogue();
 }
 
 function setPrompt(text) {
@@ -785,6 +926,76 @@ function nearestEnemy(restoredOnly = false) {
     const distance = distanceToRect(enemy);
     return distance < 96 && (!nearest || distance < distanceToRect(nearest)) ? enemy : nearest;
   }, null);
+}
+
+function villageSourceFor(areaId) {
+  return kingdomMap.nodes.find((node) => node.areaId === areaId)?.residentsFrom || null;
+}
+
+function villageResidents(areaId = currentAreaId) {
+  const sourceId = villageSourceFor(areaId);
+  if (!sourceId) return [];
+  return areas[sourceId].enemies.filter((enemy) => enemy.restored && enemy.kind !== "boss");
+}
+
+function residentPosition(index) {
+  return {
+    x: (5 + index % 8 * 3) * config.tileSize + 7,
+    y: (7 + Math.floor(index / 8) * 3) * config.tileSize + 5
+  };
+}
+
+function nearestVillageResident() {
+  const residents = villageResidents();
+  let nearest = null;
+  residents.forEach((resident, index) => {
+    const positioned = { ...resident, ...residentPosition(index) };
+    if (distanceToRect(positioned) < 78 && (!nearest || distanceToRect(positioned) < distanceToRect(nearest.positioned))) {
+      nearest = { resident, positioned };
+    }
+  });
+  return nearest?.resident || null;
+}
+
+function nearbySign() {
+  const area = areas[currentAreaId];
+  if (!area.signs) return null;
+  const playerCol = Math.floor((player.x + player.width / 2) / config.tileSize);
+  const playerRow = Math.floor((player.y + player.height / 2) / config.tileSize);
+  return Object.entries(area.signs).find(([position]) => {
+    const [x, y] = position.split(",").map(Number);
+    return Math.abs(x - playerCol) <= 1 && Math.abs(y - playerRow) <= 1;
+  }) || null;
+}
+
+function readSign() {
+  if (!activeSign) return;
+  dialogueUntil = performance.now() + 5000;
+  setPrompt(activeSign[1]);
+  window.setTimeout(updateInteractionPrompt, 5000);
+}
+
+function hasRestoredVeteran() {
+  return Object.values(areas).some((area) => area.enemies.some((enemy) => enemy.kind !== "boss" && enemy.restored && enemy.level >= 25));
+}
+
+function beginBossDialogue() {
+  bossDialogue = hasRestoredVeteran()
+    ? ["Ah king... your here at last.", "Your probably wondering who i am aren't you?", "well... its ???.", "But you can call me Kyle!"]
+    : ["OH? who are you?", "no matter, ill just kill you anyways."];
+  bossDialogueIndex = 0;
+  promptMode = "boss-dialogue";
+  setPrompt(`${bossDialogue[0]}  Press Z`);
+}
+
+function advanceBossDialogue() {
+  bossDialogueIndex += 1;
+  if (bossDialogueIndex < bossDialogue.length) {
+    setPrompt(`${bossDialogue[bossDialogueIndex]}  Press Z`);
+    return;
+  }
+  setPrompt("");
+  startBattle(activeEnemy);
 }
 
 function distanceToRect(rect) {
@@ -811,7 +1022,7 @@ function tileAt(worldX, worldY) {
 
 function checkAreaEncounters() {
   if (gameMode !== "area" || performance.now() < contactLockedUntil) return;
-  const enemy = areas[currentAreaId].enemies.find((candidate) => !candidate.restored && rectanglesOverlap(player, candidate));
+  const enemy = areas[currentAreaId].enemies.find((candidate) => candidate.kind !== "boss" && !candidate.restored && rectanglesOverlap(player, candidate));
   if (enemy) startBattle(enemy);
 }
 
@@ -821,8 +1032,17 @@ function startBattle(enemy) {
   battleBusy = false;
   battleDefending = false;
   enemy.control = enemy.controlMax;
-  document.querySelector("#battle-enemy").classList.remove("restored");
-  document.querySelector("#battle-message").textContent = enemy.visual === "flying"
+  magicMenuOpen = false;
+  const battleEnemy = document.querySelector("#battle-enemy");
+  battleEnemy.classList.remove("restored", "boss-cube");
+  battleEnemy.style.backgroundImage = "";
+  if (enemy.kind === "boss" && kyleSprite) {
+    battleEnemy.classList.add("boss-cube");
+    battleEnemy.style.backgroundImage = `url('${kyleSprite.toDataURL()}')`;
+  }
+  document.querySelector("#battle-message").textContent = enemy.kind === "boss"
+    ? "Kyle blocks the path. The final battle begins!"
+    : enemy.visual === "flying"
     ? `A lv ${enemy.level} controlled soul spotted you.`
     : `A level ${enemy.level} controlled cube lashes out. Purify it with your attacks.`;
   updateBattleActions();
@@ -850,8 +1070,9 @@ function setBattleButtons(disabled) {
 
 function updateBattleActions() {
   document.querySelector("#attack-action").textContent = playerState.magic ? "Magic" : "Attack";
-  document.querySelector("#light-spell-action").classList.toggle("hidden", !playerState.magic);
-  document.querySelector("#soul-spell-action").classList.toggle("hidden", !playerState.magic);
+  document.querySelector("#attack-action").setAttribute("aria-expanded", String(playerState.magic && magicMenuOpen));
+  document.querySelector("#light-spell-action").classList.toggle("hidden", !playerState.magic || !magicMenuOpen);
+  document.querySelector("#soul-spell-action").classList.toggle("hidden", !playerState.magic || !magicMenuOpen);
 }
 
 function playBattleEffect(name) {
@@ -932,16 +1153,23 @@ function revivePlayerAtAreaStart() {
 
 function attackAction() {
   if (battleBusy || !activeEnemy) return;
+  if (playerState.magic) {
+    magicMenuOpen = !magicMenuOpen;
+    updateBattleActions();
+    return;
+  }
   performPlayerAttack({
-    name: playerState.magic ? "Magic" : "Attack",
-    verb: attackVerb(),
-    attackPower: currentAttackPower(),
+    name: "Attack",
+    verb: "Your radiant slash",
+    attackPower: playerState.restorePower,
     extraHeal: 0
   });
 }
 
 function lightSpellAction() {
   if (battleBusy || !activeEnemy) return;
+  magicMenuOpen = false;
+  updateBattleActions();
   performPlayerAttack({
     name: "Light Spell",
     verb: "Your light spell",
@@ -952,6 +1180,8 @@ function lightSpellAction() {
 
 function soulSpellAction() {
   if (battleBusy || !activeEnemy) return;
+  magicMenuOpen = false;
+  updateBattleActions();
   performPlayerAttack({
     name: "Soul Spell",
     verb: "Your soul spell",
@@ -990,10 +1220,6 @@ function performPlayerAttack(action) {
 
 function currentAttackPower() {
   return playerState.magic ? playerState.restorePower + 1 : playerState.restorePower;
-}
-
-function attackVerb() {
-  return playerState.magic ? "Your split spell" : "Your radiant slash";
 }
 
 function damageAfterEnemyDefense(attack, defense) {
@@ -1040,17 +1266,18 @@ function finishRestoration() {
     setBattleButtons(false);
     showScreen("upgrades");
     updateUpgradeButtons();
-    document.querySelector("#upgrade-message").textContent = areaCleared
-      ? `${area.name} is cleared. A village path opened on the kingdom map.`
-      : `${area.name}: ${remainingEnemies} controlled cubes remain.`;
+    document.querySelector("#upgrade-message").textContent = activeEnemy.kind === "boss"
+      ? "Kyle has been defeated. The Controlled Palace is free."
+      : areaCleared
+      ? `${area.name} is cleared. Every restored resident is safe in the village.`
+      : `${area.name}: ${remainingEnemies} controlled creatures remain.`;
   }, 900);
 }
 
 function updateVillageLocks() {
   kingdomMap.nodes.forEach((node) => {
     if (node.kind !== "village") return;
-    const requiredArea = areas[node.unlocksAfter];
-    node.unlocked = !!requiredArea && requiredArea.enemies.length > 0 && requiredArea.enemies.every((enemy) => enemy.restored);
+    node.unlocked = true;
   });
 }
 
@@ -1082,13 +1309,13 @@ function buyUpgrade(type) {
   playerState.upgrades[type] = 1;
 
   if (type === "damage") {
-    playerState.restorePower += 1;
-    document.querySelector("#upgrade-message").textContent = "Radiant Force I learned. Attack is stronger.";
+    playerState.restorePower += 5;
+    document.querySelector("#upgrade-message").textContent = "Radiant Force I learned. Attack rises by 5.";
   }
 
   if (type === "defense") {
-    playerState.defense += 1;
-    document.querySelector("#upgrade-message").textContent = "Pristine Guard I learned. Damage taken -1.";
+    playerState.defense += 5;
+    document.querySelector("#upgrade-message").textContent = "Pristine Guard I learned. Defense rises by 5.";
   }
 
   if (type === "health") {
@@ -1176,7 +1403,7 @@ function resetGame() {
     thorns: 0
   });
   Object.values(areas).forEach((area) => {
-    area.healed = false;
+    area.healed = !!area.signs;
     area.enemies.forEach((enemy) => {
       enemy.restored = false;
       enemy.control = enemy.controlMax;
@@ -1200,7 +1427,8 @@ function resetGame() {
   updateVillageLocks();
   document.querySelector("#attack-action").textContent = "Attack";
   updateBattleActions();
-  enterKingdom();
+  magicMenuOpen = false;
+  enterArea("pristineCastle");
   contactLockedUntil = 0;
   updateUpgradeButtons();
 }
@@ -1271,7 +1499,9 @@ function drawKingdomNode(node, cameraX, cameraY) {
   ctx.restore();
 
   if (node.id === "sylvan") drawTinyShrine(x - 18, y - 28);
+  if (node.id === "pristineCastle") drawTower(x - 17, y - 48);
   if (node.id === "azureApex") drawRuin(x - 24, y - 30);
+  if (node.id === "azureVillage") drawHouse(x - 26, y - 34);
   if (node.id === "sylvanVillage") drawHouse(x - 26, y - 34);
   if (node.id === "controlledPalace") drawTower(x - 17, y - 48);
   if (node.id === "controlledPlains") drawTree(x - 18, y - 35, 1.2);
@@ -1313,8 +1543,14 @@ function drawAreaMap() {
   }
 
   drawAreaRocks(area, cameraX, cameraY);
-  area.enemies.forEach((enemy) => drawEnemy(enemy, cameraX, cameraY));
-  drawMapLabel(area.name, "Explore the area. Step on the glowing exit to return.");
+  area.enemies.filter((enemy) => !enemy.restored).forEach((enemy) => drawEnemy(enemy, cameraX, cameraY));
+  drawVillageResidents(cameraX, cameraY);
+  const subtitle = area.signs
+    ? "Read the signs, then leave through the glowing doorway."
+    : villageSourceFor(currentAreaId)
+      ? "Restored residents gather here."
+      : "Explore the area. Step on the glowing exit to return.";
+  drawMapLabel(area.name, subtitle);
 }
 
 function drawTile(tile, x, y, healed, areaId) {
@@ -1324,8 +1560,20 @@ function drawTile(tile, x, y, healed, areaId) {
   if (!grassy) ctx.fillRect(x, y, size, size);
 
   if (tile === "^") {
-    ctx.fillStyle = "#181820";
-    if (!grassy) ctx.fillRect(x, y, size, size);
+    ctx.fillStyle = areaId === "pristineCastle" ? "#706b7c" : "#181820";
+    ctx.fillRect(x, y, size, size);
+    if (areaId === "pristineCastle") {
+      ctx.strokeStyle = "#393641";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x + 2, y + 2, size - 4, size - 4);
+    }
+  }
+
+  if (areaId === "pristineCastle" && tile !== "^") {
+    ctx.fillStyle = "#bbb3a4";
+    ctx.fillRect(x, y, size, size);
+    ctx.fillStyle = "rgba(255,255,255,.12)";
+    ctx.fillRect(x + 2, y + 2, size - 4, size / 2 - 3);
   }
 
   if (tile === "T") {
@@ -1365,6 +1613,16 @@ function drawTile(tile, x, y, healed, areaId) {
   }
 
   if (tile === "S") drawTinyShrine(x + 8, y + 6);
+
+  if (tile === "Q") {
+    ctx.fillStyle = "#8d6237";
+    ctx.fillRect(x + 20, y + 21, 8, 25);
+    ctx.fillStyle = "#f2c95f";
+    ctx.fillRect(x + 5, y + 6, size - 10, 24);
+    ctx.strokeStyle = "#34313b";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(x + 5, y + 6, size - 10, 24);
+  }
 
   if (tile === "E") {
     ctx.fillStyle = "rgba(242,201,95,.28)";
@@ -1600,7 +1858,21 @@ function drawEnemy(enemy, cameraX, cameraY) {
   const x = enemy.x - cameraX;
   const y = enemy.y - cameraY;
 
-  const sprite = currentAreaId === "sylvan" ? readySylvanSprite(enemy.visual) : null;
+  if (enemy.kind === "boss" && kyleSprite) {
+    ctx.save();
+    ctx.fillStyle = "rgba(0,0,0,.32)";
+    ctx.beginPath();
+    ctx.ellipse(x + enemy.width / 2, y + enemy.height - 1, 28, 8, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.drawImage(kyleSprite, x - 18, y - 55, 82, 108);
+    ctx.restore();
+    ctx.font = "900 13px Trebuchet MS";
+    ctx.fillStyle = "#f2c95f";
+    ctx.fillText("Kyle | Lv 100", x - 20, y - 65);
+    return;
+  }
+
+  const sprite = enemy.originArea === "sylvan" ? readySylvanSprite(enemy.visual) : null;
   if (sprite) {
     const flying = enemy.visual === "flying";
     const width = enemy.width + 6;
@@ -1659,6 +1931,12 @@ function drawEnemy(enemy, cameraX, cameraY) {
   }
 }
 
+function drawVillageResidents(cameraX, cameraY) {
+  villageResidents().forEach((resident, index) => {
+    drawEnemy({ ...resident, ...residentPosition(index), restored: true }, cameraX, cameraY);
+  });
+}
+
 function drawTree(x, y, scale) {
   ctx.fillStyle = "#6b4f22";
   ctx.fillRect(x + 15 * scale, y + 25 * scale, 8 * scale, 22 * scale);
@@ -1709,8 +1987,9 @@ function drawTinyShrine(x, y) {
 }
 
 function drawMapLabel(title, subtitle) {
+  const labelWidth = Math.min(470, canvas.width - 36);
   ctx.fillStyle = "rgba(20,19,23,.75)";
-  roundRect(18, 18, 350, 62, 8);
+  roundRect(18, 18, labelWidth, 62, 8);
   ctx.fill();
   ctx.fillStyle = "#f3eee1";
   ctx.font = "900 22px Trebuchet MS";
