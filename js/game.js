@@ -151,6 +151,13 @@ sylvanGrass.onload = () => {
   sylvanGrassPattern = ctx.createPattern(tile, "repeat");
 };
 sylvanGrass.src = "img/assets/sylvan/grass.jpg";
+const restoredSylvanSprites = Object.fromEntries(
+  ["ground", "flying"].map((name) => {
+    const image = new Image();
+    image.src = `img/assets/sylvan/${name}-restored.png`;
+    return [name, image];
+  })
+);
 const sylvanSprites = Object.fromEntries(
   ["rockWide", "rockLarge", "rockSmall", "tree", "ground", "flying"].map((name) => {
     const image = new Image();
@@ -159,54 +166,12 @@ const sylvanSprites = Object.fromEntries(
   })
 );
 
-let kyleSprite = null;
-loadTransparentSprite("img/assets/enemy-kyle-boss/Kyle.png", [190, 42, 205, 270], (sprite) => {
-  kyleSprite = sprite;
-});
+const kyleSpritePath = "img/assets/enemy-kyle-boss/Kyle-transparent.png";
+const kyleSprite = new Image();
+kyleSprite.src = kyleSpritePath;
 
-function loadTransparentSprite(path, [sourceX, sourceY, width, height], onLoad) {
-  const source = new Image();
-  source.onload = () => {
-    const sprite = document.createElement("canvas");
-    sprite.width = width;
-    sprite.height = height;
-    const spriteContext = sprite.getContext("2d");
-    spriteContext.drawImage(source, sourceX, sourceY, width, height, 0, 0, width, height);
-    const pixels = spriteContext.getImageData(0, 0, width, height);
-    const visited = new Uint8Array(width * height);
-    const queue = [];
-    const enqueue = (index) => {
-      if (visited[index]) return;
-      visited[index] = 1;
-      const offset = index * 4;
-      if (pixels.data[offset] < 240 || pixels.data[offset + 1] < 240 || pixels.data[offset + 2] < 240) return;
-      pixels.data[offset + 3] = 0;
-      queue.push(index);
-    };
-    for (let x = 0; x < width; x += 1) {
-      enqueue(x);
-      enqueue((height - 1) * width + x);
-    }
-    for (let y = 0; y < height; y += 1) {
-      enqueue(y * width);
-      enqueue(y * width + width - 1);
-    }
-    for (let cursor = 0; cursor < queue.length; cursor += 1) {
-      const index = queue[cursor];
-      const x = index % width;
-      if (x > 0) enqueue(index - 1);
-      if (x < width - 1) enqueue(index + 1);
-      if (index >= width) enqueue(index - width);
-      if (index < width * (height - 1)) enqueue(index + width);
-    }
-    spriteContext.putImageData(pixels, 0, 0);
-    onLoad(sprite);
-  };
-  source.src = path;
-}
-
-function readySylvanSprite(name) {
-  const sprite = sylvanSprites[name];
+function readySylvanSprite(name, restored = false) {
+  const sprite = restored ? restoredSylvanSprites[name] : sylvanSprites[name];
   return sprite?.complete && sprite.naturalWidth > 0 ? sprite : null;
 }
 const rockSpriteFiles = {
@@ -689,6 +654,37 @@ function moveEnemies() {
     if (enemy.restored || enemy.stationary) return;
     moveEnemy(enemy);
   });
+  moveVillageResidents();
+}
+
+function moveVillageResidents() {
+  const now = performance.now();
+  villageResidents().forEach((resident) => {
+    initializeVillageResident(resident);
+    if (now < resident.villageWaitUntil) return;
+    if (now >= resident.villageMovingUntil) {
+      const directions = [[1, 0], [-1, 0], [0, 1], [0, -1], [0, 0]];
+      const [x, y] = directions[Math.floor(Math.random() * directions.length)];
+      resident.villageMoveX = x;
+      resident.villageMoveY = y;
+      resident.villageMovingUntil = now + 700 + Math.random() * 900;
+      resident.villageWaitUntil = x || y ? 0 : now + 600;
+      return;
+    }
+    const next = {
+      ...resident,
+      x: resident.villageX + resident.villageMoveX * 0.55,
+      y: resident.villageY + resident.villageMoveY * 0.55
+    };
+    if (collidesWithBlockedTile(next)) {
+      resident.villageMovingUntil = 0;
+      resident.villageWaitUntil = now + 350;
+      return;
+    }
+    resident.villageX = next.x;
+    resident.villageY = next.y;
+    if (resident.villageMoveX) resident.facing = Math.sign(resident.villageMoveX);
+  });
 }
 
 function moveEnemy(enemy) {
@@ -945,11 +941,32 @@ function residentPosition(index) {
   };
 }
 
+function initializeVillageResident(resident) {
+  if (Number.isFinite(resident.villageX)) return;
+  const source = areas[resident.originArea]?.enemies || [];
+  const usedSlots = new Set(source.filter((enemy) => Number.isInteger(enemy.villageSlot)).map((enemy) => enemy.villageSlot));
+  let slot = 0;
+  while (usedSlots.has(slot)) slot += 1;
+  const position = residentPosition(slot);
+  resident.villageSlot = slot;
+  resident.villageX = position.x;
+  resident.villageY = position.y;
+  resident.villageMoveX = 0;
+  resident.villageMoveY = 0;
+  resident.villageMovingUntil = 0;
+  resident.villageWaitUntil = 0;
+}
+
+function positionedResident(resident) {
+  initializeVillageResident(resident);
+  return { ...resident, x: resident.villageX, y: resident.villageY };
+}
+
 function nearestVillageResident() {
   const residents = villageResidents();
   let nearest = null;
-  residents.forEach((resident, index) => {
-    const positioned = { ...resident, ...residentPosition(index) };
+  residents.forEach((resident) => {
+    const positioned = positionedResident(resident);
     if (distanceToRect(positioned) < 78 && (!nearest || distanceToRect(positioned) < distanceToRect(nearest.positioned))) {
       nearest = { resident, positioned };
     }
@@ -1036,9 +1053,9 @@ function startBattle(enemy) {
   const battleEnemy = document.querySelector("#battle-enemy");
   battleEnemy.classList.remove("restored", "boss-cube");
   battleEnemy.style.backgroundImage = "";
-  if (enemy.kind === "boss" && kyleSprite) {
+  if (enemy.kind === "boss" && kyleSprite.complete && kyleSprite.naturalWidth > 0) {
     battleEnemy.classList.add("boss-cube");
-    battleEnemy.style.backgroundImage = `url('${kyleSprite.toDataURL()}')`;
+    battleEnemy.style.backgroundImage = `url('${kyleSpritePath}')`;
   }
   document.querySelector("#battle-message").textContent = enemy.kind === "boss"
     ? "Kyle blocks the path. The final battle begins!"
@@ -1251,6 +1268,7 @@ function healAction() {
 function finishRestoration() {
   window.clearTimeout(battleTimer);
   activeEnemy.restored = true;
+  if (activeEnemy.kind !== "boss") initializeVillageResident(activeEnemy);
   playerState.divinePoints += config.restoreReward;
   const area = areas[currentAreaId];
   const remainingEnemies = area.enemies.filter((enemy) => !enemy.restored).length;
@@ -1416,6 +1434,13 @@ function resetGame() {
       enemy.routeUntil = 0;
       enemy.talked = false;
       enemy.facing = 1;
+      delete enemy.villageSlot;
+      delete enemy.villageX;
+      delete enemy.villageY;
+      delete enemy.villageMoveX;
+      delete enemy.villageMoveY;
+      delete enemy.villageMovingUntil;
+      delete enemy.villageWaitUntil;
       enemy.x = enemy.spawnX;
       enemy.y = enemy.spawnY;
     });
@@ -1858,7 +1883,7 @@ function drawEnemy(enemy, cameraX, cameraY) {
   const x = enemy.x - cameraX;
   const y = enemy.y - cameraY;
 
-  if (enemy.kind === "boss" && kyleSprite) {
+  if (enemy.kind === "boss" && kyleSprite.complete && kyleSprite.naturalWidth > 0) {
     ctx.save();
     ctx.fillStyle = "rgba(0,0,0,.32)";
     ctx.beginPath();
@@ -1872,7 +1897,7 @@ function drawEnemy(enemy, cameraX, cameraY) {
     return;
   }
 
-  const sprite = enemy.originArea === "sylvan" ? readySylvanSprite(enemy.visual) : null;
+  const sprite = enemy.originArea === "sylvan" ? readySylvanSprite(enemy.visual, enemy.restored) : null;
   if (sprite) {
     const flying = enemy.visual === "flying";
     const width = enemy.width + 6;
@@ -1888,7 +1913,7 @@ function drawEnemy(enemy, cameraX, cameraY) {
       ctx.shadowBlur = 12;
     }
     ctx.translate(x + enemy.width / 2, y + enemy.height - height - hover);
-    ctx.scale(enemy.facing || 1, 1);
+    ctx.scale(-(enemy.facing || 1), 1);
     ctx.drawImage(sprite, -width / 2, 0, width, height);
     ctx.restore();
     ctx.font = "800 12px Trebuchet MS";
@@ -1932,8 +1957,8 @@ function drawEnemy(enemy, cameraX, cameraY) {
 }
 
 function drawVillageResidents(cameraX, cameraY) {
-  villageResidents().forEach((resident, index) => {
-    drawEnemy({ ...resident, ...residentPosition(index), restored: true }, cameraX, cameraY);
+  villageResidents().forEach((resident) => {
+    drawEnemy(positionedResident(resident), cameraX, cameraY);
   });
 }
 
