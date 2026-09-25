@@ -4,7 +4,7 @@ KYLE IS HERE AND HE IS AWESOME!
 
 2. replace the lv 11 cube with a lv 4 cube.
 
-3. when a cube is restored (beaten) it should become white. When a soul is defeated... it becomes a smaller version of the king... but get rid of the lines on its cloak and make the antlers 4 points instead of 6. (2 antler points on each side instead of 3 like the king). 
+3. when a cube is restored (beaten) it should become white with black eyes (how they originally looked when restored, bring that model back). When a soul is defeated... it becomes a smaller version of the king... but get rid of the lines on its cloak and make the antlers 4 points instead of 6. (2 antler points on each side instead of 3 like the king). 
 
 4. Also... when you defeat an enemy, it just instantly goes to the village. instead... make it stay in the area until you leave the area. if you come back... then it should be gone. 
 
