@@ -319,6 +319,7 @@ initializeBoss();
 function initializeBoss() {
   const area = areas.controlledPalace;
   const stats = statsForLevel(100);
+  const bossHealth = 1000;
   area.enemies = [{
     id: "kyle-boss",
     name: "Kyle",
@@ -328,9 +329,9 @@ function initializeBoss() {
     level: 100,
     attack: stats.attack,
     defense: stats.defense,
-    maxHealth: stats.health,
-    controlMax: stats.health,
-    control: stats.health,
+    maxHealth: bossHealth,
+    controlMax: bossHealth,
+    control: bossHealth,
     x: 15 * config.tileSize + 7,
     y: 9 * config.tileSize + 5,
     spawnX: 15 * config.tileSize + 7,
@@ -425,12 +426,20 @@ function createEnemiesForArea(area, count, seedText) {
   const shuffled = seededShuffle(positions.filter((position) => position.tile !== "C"), seedFromText(seedText));
   const orderedPositions = [...marked, ...shuffled];
   const levelRange = areaLevelRanges[seedText] || { min: 1, max: 1 };
-
-  return orderedPositions.slice(0, count).map((position, index) => {
+  const selectedPositions = orderedPositions.slice(0, count);
+  const preferredLevels = selectedPositions.map((_, index) => {
     const visual = index % 4 === 3 ? "flying" : "ground";
-    const level = visual === "flying"
+    return visual === "flying"
       ? levelForEnemy(Math.floor(index / 4), Math.floor(count / 4), soulLevelRanges[seedText] || levelRange)
       : levelForEnemy(index, count, levelRange);
+  });
+  const levels = seedText === "sylvan"
+    ? replaceDuplicateLevels(preferredLevels, levelRange)
+    : preferredLevels;
+
+  return selectedPositions.map((position, index) => {
+    const visual = index % 4 === 3 ? "flying" : "ground";
+    const level = levels[index];
     const stats = statsForLevel(level);
 
     return {
@@ -453,6 +462,7 @@ function createEnemiesForArea(area, count, seedText) {
       width: 34,
       height: 38,
       restored: false,
+      relocated: false,
       controlMax: stats.health,
       control: stats.health,
       moveX: 0,
@@ -460,6 +470,25 @@ function createEnemiesForArea(area, count, seedText) {
       movingUntil: 0,
       waitUntil: 0
     };
+  });
+}
+
+function replaceDuplicateLevels(levels, range) {
+  const uniqueLevels = new Set(levels);
+  const missingLevels = [];
+  for (let level = range.min; level <= range.max; level += 1) {
+    if (!uniqueLevels.has(level)) missingLevels.push(level);
+  }
+
+  const usedLevels = new Set();
+  return levels.map((level) => {
+    if (!usedLevels.has(level)) {
+      usedLevels.add(level);
+      return level;
+    }
+    const replacement = missingLevels.shift();
+    usedLevels.add(replacement);
+    return replacement;
   });
 }
 
@@ -571,6 +600,7 @@ function updateHud() {
 }
 
 function enterKingdom() {
+  clearInteractionState();
   gameMode = "kingdom";
   const node = kingdomMap.nodes.find((mapNode) => mapNode.areaId === currentAreaId) || kingdomMap.nodes[0];
   player.x = node.x - player.width / 2;
@@ -580,6 +610,7 @@ function enterKingdom() {
 
 function enterArea(areaId) {
   const area = areas[areaId];
+  clearInteractionState();
   gameMode = "area";
   currentAreaId = areaId;
   player.x = area.start.x * config.tileSize + 6;
@@ -589,12 +620,28 @@ function enterArea(areaId) {
 }
 
 function leaveArea() {
+  relocateRestoredEnemies(currentAreaId);
   areas[currentAreaId].enemies.forEach((enemy) => {
     enemy.chasing = false;
     enemy.route = [];
     enemy.routeUntil = 0;
   });
   enterKingdom();
+}
+
+function relocateRestoredEnemies(areaId) {
+  areas[areaId].enemies.forEach((enemy) => {
+    if (enemy.kind !== "boss" && enemy.restored) enemy.relocated = true;
+  });
+}
+
+function clearInteractionState() {
+  promptMode = "";
+  activeEnemy = null;
+  activeNode = null;
+  activeSign = null;
+  bossDialogue = [];
+  bossDialogueIndex = 0;
   setPrompt("");
 }
 
@@ -865,7 +912,7 @@ function updateInteractionPrompt() {
   }
 
   if (gameMode === "area") {
-    const boss = areas[currentAreaId].enemies.find((enemy) => enemy.kind === "boss" && !enemy.restored && distanceToRect(enemy) < 96);
+    const boss = areas[currentAreaId].enemies.find((enemy) => enemy.kind === "boss" && !enemy.restored && rectanglesOverlap(player, enemy));
     if (boss) {
       activeEnemy = boss;
       promptMode = "challenge-boss";
@@ -931,7 +978,7 @@ function villageSourceFor(areaId) {
 function villageResidents(areaId = currentAreaId) {
   const sourceId = villageSourceFor(areaId);
   if (!sourceId) return [];
-  return areas[sourceId].enemies.filter((enemy) => enemy.restored && enemy.kind !== "boss");
+  return areas[sourceId].enemies.filter((enemy) => enemy.restored && enemy.relocated && enemy.kind !== "boss");
 }
 
 function residentPosition(index) {
@@ -1424,6 +1471,7 @@ function resetGame() {
     area.healed = !!area.signs;
     area.enemies.forEach((enemy) => {
       enemy.restored = false;
+      enemy.relocated = false;
       enemy.control = enemy.controlMax;
       enemy.moveX = 0;
       enemy.moveY = 0;
@@ -1568,7 +1616,7 @@ function drawAreaMap() {
   }
 
   drawAreaRocks(area, cameraX, cameraY);
-  area.enemies.filter((enemy) => !enemy.restored).forEach((enemy) => drawEnemy(enemy, cameraX, cameraY));
+  area.enemies.filter((enemy) => !enemy.relocated).forEach((enemy) => drawEnemy(enemy, cameraX, cameraY));
   drawVillageResidents(cameraX, cameraY);
   const subtitle = area.signs
     ? "Read the signs, then leave through the glowing doorway."
