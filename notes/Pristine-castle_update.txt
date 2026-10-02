@@ -1,0 +1,13 @@
+This update is gonna be on the pristine castle btw. otherwise, good job!
+
+1. ok. can you make the pristine castle a bit like... ruined? have 2 statues of the king be on the ground cracked (one on each side of the thrown), have an empty thrown at the top middle of the room that you can sit on pressing z! MAKE A SITTING ANIMATION!!! THAT WOULD BE SO COOL!!! 
+
+2. make the signs closer together, and have them look withered. also have the signs on the right side instead of the middle of the castle.
+
+3. before you can leave the pristine castle, you need your staff in order to attack in battles. make a staff appear on the thrown, and grab it with z. After the player grabs the staff, then the option to sit on the thrown becomes available. 
+
+4. There will be some big rocks in front of the exit, preventing you from leaving the castle. if you walk up to the rocks and press z, then the rocks will be destroyed. ONLY AFTER YOU GRAB THE STAFF. 
+
+5. i talked about the statues, the signs, and the thrown, but can you add some little decorations on the right side of the map? maybe like... 3 extra cloaks? (hanging on the wall but noticeable) also... add a dagger diagnal (down right) from the statue to the right of the thrown. 
+
+6. if you press Z while touching the cloaks make it say, "they dont seem to fit you." if you press Z while standing OVER the dagger, make it say, "its covered in dust."
