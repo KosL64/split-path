@@ -104,6 +104,7 @@ let promptMode = "";
 let activeEnemy = null;
 let activeNode = null;
 let activeSign = null;
+let activeHouse = null;
 let bossDialogue = [];
 let bossDialogueIndex = 0;
 let magicMenuOpen = false;
@@ -214,49 +215,12 @@ const rockSprites = Object.fromEntries(
 
 const areas = {
   pristineCastle: makePristineCastle(),
-  sylvan: {
-    name: "Sylvan",
-    width: 36,
-    height: 26,
-    start: { x: 4, y: 12 },
-    cameraX: 0,
-    cameraY: 0,
-    healed: false,
-    enemies: [],
-    map: [
-      "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
-      "^TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT^",
-      "^T......g.....g..............TTTTT.^",
-      "^T..RRRRRR......RRRRR............T.^",
-      "^T..R...R...........R......gg....T.^",
-      "^T..R...R...TTT.....R............T.^",
-      "^T..........TPT..................T.^",
-      "^T....gg....TTT......RRRR........T.^",
-      "^T...................R..R........T.^",
-      "^T.....TTT...........R..R...gg...T.^",
-      "^T.....T.T.......................T.^",
-      "^T...............................T.^",
-      "^T...S............C..............T.^",
-      "^T...............................T.^",
-      "^T...........gg...........RRR....T.^",
-      "^T.......................R...R...T.^",
-      "^T....RRRR...............R...R...T.^",
-      "^T....R..R.......................T.^",
-      "^T..........................gg...T.^",
-      "^T...........TTT.................T.^",
-      "^T....gg.....T.T......RRRR.......T.^",
-      "^T............E.......R..R.......T.^",
-      "^T....................RRRR.......T.^",
-      "^T................................^",
-      "^TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT^",
-      "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
-    ]
-  },
-  azureApex: makePreviewArea("Azure Apex", true),
-  azureVillage: makePreviewArea("Azure Village", false),
-  sylvanVillage: makePreviewArea("Sylvan Village", false),
+  sylvan: makeSylvanArea(),
+  azureApex: makeAzureApexArea(),
+  azureVillage: makeVillageArea("Azure Village", "azureVillage", 31),
+  sylvanVillage: makeVillageArea("Sylvan Village", "sylvanVillage", 20),
   controlledPalace: makePreviewArea("Controlled Palace", false),
-  controlledPlains: makePreviewArea("Controlled Plains", true)
+  controlledPlains: makeControlledPlainsArea()
 };
 
 function makePristineCastle() {
@@ -324,6 +288,177 @@ function makePreviewArea(name, hasEnemies) {
       "^TTTTTTTTTTTTTTTTTTTTTTTTTTTT^",
       "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
     ]
+  };
+}
+
+function createAreaGrid(width, height, borderTile = "^", innerBorderTile = "T") {
+  const grid = Array.from({ length: height }, (_, row) => Array.from({ length: width }, (_, col) => {
+    if (row === 0 || row === height - 1 || col === 0 || col === width - 1) return borderTile;
+    if (row === 1 || row === height - 2 || col === 1 || col === width - 2) return innerBorderTile;
+    return ".";
+  }));
+  return grid;
+}
+
+function setTiles(grid, points, tile) {
+  points.forEach(([x, y]) => {
+    if (grid[y]?.[x]) grid[y][x] = tile;
+  });
+}
+
+function fillRectTiles(grid, x, y, width, height, tile) {
+  for (let row = y; row < y + height; row += 1) {
+    for (let col = x; col < x + width; col += 1) {
+      if (grid[row]?.[col]) grid[row][col] = tile;
+    }
+  }
+}
+
+function finishAreaGrid(grid) {
+  return grid.map((row) => row.join(""));
+}
+
+function makeSylvanArea() {
+  const width = 54;
+  const height = 26;
+  const grid = createAreaGrid(width, height, "^", "T");
+
+  [
+    [8, 5, 3, 2], [17, 4, 5, 1], [31, 5, 4, 2], [44, 6, 3, 2],
+    [5, 17, 4, 2], [22, 18, 3, 2], [35, 16, 5, 2], [46, 18, 3, 2]
+  ].forEach(([x, y, w, h]) => fillRectTiles(grid, x, y, w, h, "R"));
+
+  [
+    [14, 8], [15, 8], [16, 8], [15, 9],
+    [28, 11], [29, 11], [30, 11], [29, 12],
+    [40, 13], [41, 13], [42, 13], [41, 14],
+    [11, 21], [12, 21], [13, 21], [12, 20]
+  ].forEach(([x, y]) => { grid[y][x] = "T"; });
+
+  setTiles(grid, [[9, 8], [20, 7], [25, 16], [33, 9], [43, 20], [47, 11], [16, 14], [38, 22]], "g");
+  setTiles(grid, [[20, 12], [32, 7], [37, 18], [45, 15], [12, 11], [27, 21]], "C");
+  grid[6][18] = "P";
+  grid[12][5] = "S";
+  grid[22][49] = "E";
+
+  return {
+    name: "Sylvan",
+    width,
+    height,
+    start: { x: 4, y: 12 },
+    cameraX: 0,
+    cameraY: 0,
+    healed: false,
+    enemies: [],
+    map: finishAreaGrid(grid)
+  };
+}
+
+function makeAzureApexArea() {
+  const width = 54;
+  const height = 26;
+  const grid = createAreaGrid(width, height, "^", "R");
+
+  [
+    [7, 4, 5, 2], [19, 7, 4, 3], [35, 5, 6, 2], [44, 10, 3, 4],
+    [10, 18, 7, 2], [27, 17, 4, 3], [39, 20, 6, 2]
+  ].forEach(([x, y, w, h]) => fillRectTiles(grid, x, y, w, h, "R"));
+
+  [
+    [14, 13, 5, 1], [23, 4, 1, 5], [31, 12, 6, 1], [48, 17, 1, 4]
+  ].forEach(([x, y, w, h]) => fillRectTiles(grid, x, y, w, h, "W"));
+
+  setTiles(grid, [[8, 12], [15, 16], [26, 9], [30, 20], [42, 8], [46, 21], [35, 14], [20, 21]], "g");
+  setTiles(grid, [[13, 9], [24, 14], [32, 7], [41, 16], [47, 12], [18, 20], [36, 21]], "C");
+  grid[5][24] = "P";
+  grid[12][5] = "S";
+  grid[22][49] = "E";
+
+  return {
+    name: "Azure Apex",
+    width,
+    height,
+    start: { x: 4, y: 12 },
+    cameraX: 0,
+    cameraY: 0,
+    healed: false,
+    enemies: [],
+    hasEnemies: true,
+    map: finishAreaGrid(grid)
+  };
+}
+
+function makeControlledPlainsArea() {
+  const width = 38;
+  const height = 78;
+  const grid = createAreaGrid(width, height, "^", "T");
+
+  for (let y = 8; y < height - 8; y += 9) {
+    fillRectTiles(grid, 7, y, 6, 2, "R");
+    fillRectTiles(grid, 25, y + 3, 5, 3, "R");
+    setTiles(grid, [[17, y + 1], [18, y + 1], [19, y + 1], [20, y + 1]], "g");
+    setTiles(grid, [[11, y + 4], [19, y + 5], [28, y + 1], [30, y + 6]], "C");
+  }
+
+  for (let y = 15; y < height - 10; y += 14) {
+    fillRectTiles(grid, 15, y, 1, 5, "W");
+    fillRectTiles(grid, 16, y + 4, 5, 1, "W");
+  }
+
+  grid[5][18] = "P";
+  grid[11][5] = "S";
+  grid[74][19] = "E";
+
+  return {
+    name: "Controlled Plains",
+    width,
+    height,
+    start: { x: 19, y: 3 },
+    cameraX: 0,
+    cameraY: 0,
+    healed: false,
+    enemies: [],
+    hasEnemies: true,
+    map: finishAreaGrid(grid)
+  };
+}
+
+function makeVillageArea(name, areaId, homeCount) {
+  const sylvan = areaId === "sylvanVillage";
+  const width = sylvan ? 32 : 36;
+  const height = sylvan ? 18 : 20;
+  const grid = createAreaGrid(width, height, "^", sylvan ? "T" : "R");
+  const homeSlots = [];
+  const columns = sylvan ? [5, 10, 15, 20, 25] : [5, 10, 15, 20, 25, 30];
+  const rows = sylvan ? [4, 8, 12, 15] : [4, 7, 10, 13, 16, 18];
+
+  rows.forEach((row, rowIndex) => {
+    columns.forEach((col, colIndex) => {
+      if (homeSlots.length >= homeCount) return;
+      const houseY = Math.max(2, row - 1);
+      grid[houseY][col] = "h";
+      grid[row][col] = "d";
+      if ((rowIndex + colIndex) % 2 === 0 && grid[row]?.[col + 1]) grid[row][col + 1] = "g";
+      homeSlots.push({ x: col, y: row, label: `${name} Home ${homeSlots.length + 1}` });
+    });
+  });
+
+  setTiles(grid, sylvan ? [[3, 5], [28, 7], [3, 13], [28, 14]] : [[3, 5], [32, 7], [4, 15], [31, 16]], "T");
+  grid[height - 3][Math.floor(width / 2)] = "E";
+  grid[Math.floor(height / 2)][3] = "S";
+
+  return {
+    name,
+    width,
+    height,
+    start: { x: Math.floor(width / 2), y: height - 4 },
+    cameraX: 0,
+    cameraY: 0,
+    healed: true,
+    enemies: [],
+    villageTheme: areaId,
+    homeSlots,
+    map: finishAreaGrid(grid)
   };
 }
 
@@ -655,6 +790,7 @@ function clearInteractionState() {
   activeEnemy = null;
   activeNode = null;
   activeSign = null;
+  activeHouse = null;
   activeCastleFeature = null;
   bossDialogue = [];
   bossDialogueIndex = 0;
@@ -980,7 +1116,7 @@ function collidesWithBlockedTile(rect) {
 }
 
 function isBlockedTile(tile) {
-  return !tile || tile === "^" || tile === "T" || tile === "W" || tile === "H" || tile === "V" || (tile === "B" && !castleState.exitCleared);
+  return !tile || tile === "^" || tile === "T" || tile === "W" || tile === "H" || tile === "V" || tile === "h" || (tile === "B" && !castleState.exitCleared);
 }
 
 function updateCamera() {
@@ -1000,6 +1136,7 @@ function updateInteractionPrompt() {
   if (promptMode === "boss-dialogue") return;
   activeNode = null;
   activeSign = null;
+  activeHouse = null;
   activeCastleFeature = null;
   promptMode = "";
 
@@ -1044,6 +1181,14 @@ function updateInteractionPrompt() {
       return;
     }
 
+    const house = nearbyVillageHouseDoor();
+    if (house) {
+      activeHouse = house;
+      promptMode = "inspect-house";
+      setPrompt(`Press Z to enter ${house.label}`);
+      return;
+    }
+
     const sign = nearbySign();
     if (sign) {
       activeSign = sign;
@@ -1067,6 +1212,7 @@ function usePrompt() {
   if (promptMode === "enter-area" && activeNode?.unlocked) return enterArea(activeNode.areaId);
   if (promptMode === "leave-area") return leaveArea();
   if (promptMode === "talk") return talkToNpc();
+  if (promptMode === "inspect-house") return inspectHouse();
   if (promptMode === "read-sign") return readSign();
   if (promptMode === "challenge-boss") return beginBossDialogue();
   if (promptMode === "boss-dialogue") return advanceBossDialogue();
@@ -1092,13 +1238,25 @@ function villageSourceFor(areaId) {
   return kingdomMap.nodes.find((node) => node.areaId === areaId)?.residentsFrom || null;
 }
 
+function villageAreaForSource(sourceId) {
+  return kingdomMap.nodes.find((node) => node.kind === "village" && node.residentsFrom === sourceId)?.areaId || null;
+}
+
 function villageResidents(areaId = currentAreaId) {
   const sourceId = villageSourceFor(areaId);
   if (!sourceId) return [];
   return areas[sourceId].enemies.filter((enemy) => enemy.restored && enemy.relocated && enemy.kind !== "boss");
 }
 
-function residentPosition(index) {
+function residentPosition(index, villageAreaId = currentAreaId) {
+  const home = areas[villageAreaId]?.homeSlots?.[index];
+  if (home) {
+    return {
+      x: home.x * config.tileSize + 7,
+      y: home.y * config.tileSize + 5
+    };
+  }
+
   return {
     x: (5 + index % 8 * 3) * config.tileSize + 7,
     y: (7 + Math.floor(index / 8) * 3) * config.tileSize + 5
@@ -1111,8 +1269,10 @@ function initializeVillageResident(resident) {
   const usedSlots = new Set(source.filter((enemy) => Number.isInteger(enemy.villageSlot)).map((enemy) => enemy.villageSlot));
   let slot = 0;
   while (usedSlots.has(slot)) slot += 1;
-  const position = residentPosition(slot);
+  const villageAreaId = villageAreaForSource(resident.originArea);
+  const position = residentPosition(slot, villageAreaId);
   resident.villageSlot = slot;
+  resident.homeAreaId = villageAreaId;
   resident.villageX = position.x;
   resident.villageY = position.y;
   resident.villageMoveX = 0;
@@ -1136,6 +1296,14 @@ function nearestVillageResident() {
     }
   });
   return nearest?.resident || null;
+}
+
+function nearbyVillageHouseDoor() {
+  const area = areas[currentAreaId];
+  if (!area.homeSlots) return null;
+  const playerCol = Math.floor((player.x + player.width / 2) / config.tileSize);
+  const playerRow = Math.floor((player.y + player.height / 2) / config.tileSize);
+  return area.homeSlots.find((home) => Math.abs(home.x - playerCol) <= 0 && Math.abs(home.y - playerRow) <= 0) || null;
 }
 
 function nearbySign() {
@@ -1218,6 +1386,11 @@ function readSign() {
   dialogueUntil = performance.now() + 5000;
   setPrompt(activeSign[1]);
   window.setTimeout(updateInteractionPrompt, 5000);
+}
+
+function inspectHouse() {
+  if (!activeHouse) return;
+  showTemporaryPrompt(`${activeHouse.label} is warm, quiet, and just big enough to step inside.`, 2600);
 }
 
 function hasRestoredVeteran() {
@@ -1689,6 +1862,7 @@ function resetGame() {
       delete enemy.villageMoveY;
       delete enemy.villageMovingUntil;
       delete enemy.villageWaitUntil;
+      delete enemy.homeAreaId;
       enemy.x = enemy.spawnX;
       enemy.y = enemy.spawnY;
     });
@@ -1790,8 +1964,9 @@ function drawAreaMap() {
   const area = areas[currentAreaId];
   const cameraX = area.cameraX;
   const cameraY = area.cameraY;
+  const palette = areaPalette(currentAreaId);
 
-  ctx.fillStyle = area.healed ? "#405f5b" : "#242631";
+  ctx.fillStyle = area.healed ? palette.healedBase : palette.controlledBase;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   const startCol = Math.floor(cameraX / config.tileSize);
@@ -1831,14 +2006,86 @@ function drawAreaMap() {
   drawMapLabel(area.name, subtitle);
 }
 
+function areaPalette(areaId) {
+  const palettes = {
+    sylvan: {
+      controlledBase: "#20352b",
+      healedBase: "#2f7045",
+      floor: "#31593b",
+      healedFloor: "#3f8050",
+      wall: "#18271f",
+      tree: "#27643a",
+      grass: "#84d66d",
+      water: "#2f766e",
+      houseRoof: "#356b3f",
+      houseBody: "#d7c889",
+      door: "#6e4f2c"
+    },
+    sylvanVillage: {
+      controlledBase: "#2f7045",
+      healedBase: "#3f8a52",
+      floor: "#4f9a5a",
+      healedFloor: "#58a962",
+      wall: "#21482d",
+      tree: "#1f6a3a",
+      grass: "#a2e076",
+      water: "#32766b",
+      houseRoof: "#2f7a43",
+      houseBody: "#e1d79a",
+      door: "#71542d"
+    },
+    azureApex: {
+      controlledBase: "#253a4c",
+      healedBase: "#2f6874",
+      floor: "#33556a",
+      healedFloor: "#3a7c86",
+      wall: "#1b2937",
+      tree: "#237070",
+      grass: "#63d2aa",
+      water: "#1d5f91",
+      houseRoof: "#1c5f91",
+      houseBody: "#c8e2da",
+      door: "#31506d"
+    },
+    azureVillage: {
+      controlledBase: "#2f6874",
+      healedBase: "#367f8e",
+      floor: "#3d8990",
+      healedFloor: "#49a19b",
+      wall: "#233a4b",
+      tree: "#197b73",
+      grass: "#75ddb8",
+      water: "#1f6ea5",
+      houseRoof: "#1f67a5",
+      houseBody: "#d5eee8",
+      door: "#31506d"
+    },
+    controlledPlains: {
+      controlledBase: "#242631",
+      healedBase: "#405f5b",
+      floor: "#393944",
+      healedFloor: "#496f59",
+      wall: "#181820",
+      tree: "#252934",
+      grass: "#514c62",
+      water: "#252d47",
+      houseRoof: "#dd6c7b",
+      houseBody: "#f3eee1",
+      door: "#6b4f22"
+    }
+  };
+  return palettes[areaId] || palettes.controlledPlains;
+}
+
 function drawTile(tile, x, y, healed, areaId) {
   const size = config.tileSize;
+  const palette = areaPalette(areaId);
   const grassy = areaId === "sylvan" && sylvanGrassPattern;
-  ctx.fillStyle = healed ? "#496f59" : "#393944";
+  ctx.fillStyle = healed ? palette.healedFloor : palette.floor;
   if (!grassy) ctx.fillRect(x, y, size, size);
 
   if (tile === "^") {
-    ctx.fillStyle = areaId === "pristineCastle" ? "#706b7c" : "#181820";
+    ctx.fillStyle = areaId === "pristineCastle" ? "#706b7c" : palette.wall;
     ctx.fillRect(x, y, size, size);
     if (areaId === "pristineCastle") {
       ctx.strokeStyle = "#393641";
@@ -1855,12 +2102,12 @@ function drawTile(tile, x, y, healed, areaId) {
   }
 
   if (tile === "T") {
-    ctx.fillStyle = healed ? "#315b3e" : "#252934";
+    ctx.fillStyle = healed ? palette.tree : palette.wall;
     if (!grassy) ctx.fillRect(x, y, size, size);
     if (areaId === "sylvan" && readySylvanSprite("tree")) {
-      ctx.drawImage(sylvanSprites.tree, x + 3, y - 16, size - 6, size + 16);
+      ctx.drawImage(sylvanSprites.tree, x - 13, y - 60, size + 26, size + 60);
     } else {
-      drawTree(x + 10, y + 5, 0.72);
+      drawTree(x + 8, y + 2, areaId === "sylvanVillage" ? 0.95 : 0.72, palette.tree);
     }
   }
 
@@ -1873,10 +2120,31 @@ function drawTile(tile, x, y, healed, areaId) {
   }
 
   if (tile === "g") {
-    ctx.fillStyle = healed ? "#7ac878" : "#514c62";
+    ctx.fillStyle = healed ? palette.grass : palette.grass;
     for (let i = 0; i < 5; i += 1) {
       ctx.fillRect(x + 6 + i * 8, y + 30 - (i % 2) * 7, 5, 12);
     }
+  }
+
+  if (tile === "W") {
+    ctx.fillStyle = palette.water;
+    ctx.fillRect(x, y, size, size);
+    ctx.strokeStyle = "rgba(243,238,225,.22)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x + 7, y + 22);
+    ctx.quadraticCurveTo(x + 18, y + 14, x + 29, y + 22);
+    ctx.quadraticCurveTo(x + 38, y + 29, x + 45, y + 22);
+    ctx.stroke();
+  }
+
+  if (tile === "h") drawVillageHouse(x, y, palette);
+
+  if (tile === "d") {
+    ctx.fillStyle = palette.door;
+    ctx.fillRect(x + 15, y, 18, 26);
+    ctx.fillStyle = "rgba(242,201,95,.24)";
+    ctx.fillRect(x + 7, y + 28, size - 14, 12);
   }
 
   if (tile === "P") {
@@ -2415,10 +2683,38 @@ function drawVillageResidents(cameraX, cameraY) {
   });
 }
 
-function drawTree(x, y, scale) {
+function drawVillageHouse(x, y, palette) {
+  ctx.save();
+  ctx.fillStyle = "rgba(0,0,0,.18)";
+  ctx.beginPath();
+  ctx.ellipse(x + 24, y + 45, 30, 8, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = palette.houseRoof;
+  ctx.strokeStyle = "#242129";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(x + 24, y - 22);
+  ctx.lineTo(x - 7, y + 9);
+  ctx.lineTo(x + 55, y + 9);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = palette.houseBody;
+  roundRect(x - 1, y + 8, 50, 42, 4);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = palette.door;
+  ctx.fillRect(x + 17, y + 23, 15, 27);
+  ctx.fillStyle = "rgba(255,255,255,.55)";
+  ctx.fillRect(x + 6, y + 20, 9, 10);
+  ctx.fillRect(x + 35, y + 20, 9, 10);
+  ctx.restore();
+}
+
+function drawTree(x, y, scale, leafColor = "#7ac878") {
   ctx.fillStyle = "#6b4f22";
   ctx.fillRect(x + 15 * scale, y + 25 * scale, 8 * scale, 22 * scale);
-  ctx.fillStyle = "#7ac878";
+  ctx.fillStyle = leafColor;
   ctx.beginPath();
   ctx.arc(x + 18 * scale, y + 18 * scale, 18 * scale, 0, Math.PI * 2);
   ctx.fill();
