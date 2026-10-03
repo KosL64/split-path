@@ -716,7 +716,11 @@ function moveEnemies() {
   const area = areas[currentAreaId];
 
   area.enemies.forEach((enemy) => {
-    if (enemy.restored || enemy.stationary) return;
+    if (enemy.stationary) return;
+    if (enemy.restored) {
+      if (!enemy.relocated && enemy.visual === "ground") moveEnemy(enemy);
+      return;
+    }
     moveEnemy(enemy);
   });
   moveVillageResidents();
@@ -754,6 +758,20 @@ function moveVillageResidents() {
 
 function moveEnemy(enemy) {
   const now = performance.now();
+  const restoredTarget = enemy.restored ? null : nearestRestoredCube(enemy, config.tileSize * 4);
+
+  if (enemy.restored && enemy.visual === "ground") {
+    const threat = nearestControlledEnemy(enemy, config.tileSize * 4);
+    if (threat) {
+      fleeFromEnemy(enemy, threat, now);
+      return;
+    }
+  }
+
+  if (restoredTarget) {
+    chaseTarget(enemy, restoredTarget, now);
+    return;
+  }
 
   if (enemy.visual === "flying" && now >= contactLockedUntil) {
     const size = config.tileSize;
@@ -763,7 +781,7 @@ function moveEnemy(enemy) {
     const enemyRow = Math.floor((enemy.y + enemy.height / 2) / size);
     if (Math.abs(playerCol - enemyCol) <= 1 && Math.abs(playerRow - enemyRow) <= 1) enemy.chasing = true;
     if (enemy.chasing) {
-      chasePlayer(enemy, now);
+      chaseTarget(enemy, player, now);
       return;
     }
   }
@@ -775,7 +793,7 @@ function moveEnemy(enemy) {
     return;
   }
 
-  const speed = 0.8;
+  const speed = enemyMoveSpeed(enemy);
   const next = {
     ...enemy,
     x: enemy.x + enemy.moveX * speed,
@@ -793,18 +811,63 @@ function moveEnemy(enemy) {
   if (enemy.moveX) enemy.facing = Math.sign(enemy.moveX);
 }
 
-function chasePlayer(enemy, now) {
+function nearestRestoredCube(enemy, range) {
+  return nearestEnemyMatching(enemy, range, (candidate) => candidate.restored && !candidate.relocated && candidate.visual === "ground");
+}
+
+function nearestControlledEnemy(enemy, range) {
+  return nearestEnemyMatching(enemy, range, (candidate) => !candidate.restored && candidate.kind !== "boss");
+}
+
+function nearestEnemyMatching(enemy, range, predicate) {
+  let nearest = null;
+  let nearestDistance = range;
+  areas[currentAreaId].enemies.forEach((candidate) => {
+    if (candidate === enemy || !predicate(candidate)) return;
+    const distance = Math.hypot(candidate.x - enemy.x, candidate.y - enemy.y);
+    if (distance < nearestDistance) {
+      nearest = candidate;
+      nearestDistance = distance;
+    }
+  });
+  return nearest;
+}
+
+function fleeFromEnemy(enemy, threat, now) {
+  if (now >= enemy.movingUntil || enemy.fleeingFrom !== threat.id) {
+    const horizontal = enemy.x - threat.x;
+    const vertical = enemy.y - threat.y;
+    const preferred = Math.abs(horizontal) >= Math.abs(vertical)
+      ? [{ x: Math.sign(horizontal) || 1, y: 0 }, { x: 0, y: Math.sign(vertical) || 1 }]
+      : [{ x: 0, y: Math.sign(vertical) || 1 }, { x: Math.sign(horizontal) || 1, y: 0 }];
+    const directions = [...preferred, ...preferred.map(({ x, y }) => ({ x: -x, y: -y }))];
+    const direction = directions.find(({ x, y }) => !collidesWithBlockedTile({
+      ...enemy,
+      x: enemy.x + x * enemyMoveSpeed(enemy),
+      y: enemy.y + y * enemyMoveSpeed(enemy)
+    }));
+    if (!direction) return;
+    enemy.moveX = direction.x;
+    enemy.moveY = direction.y;
+    enemy.movingUntil = now + 500;
+    enemy.fleeingFrom = threat.id;
+  }
+
+  moveEnemyInCurrentDirection(enemy, now, 0.9);
+}
+
+function chaseTarget(enemy, targetEntity, now) {
   const size = config.tileSize;
   const goal = {
-    x: Math.floor((player.x + player.width / 2) / size),
-    y: Math.floor((player.y + player.height / 2) / size)
+    x: Math.floor((targetEntity.x + targetEntity.width / 2) / size),
+    y: Math.floor((targetEntity.y + targetEntity.height / 2) / size)
   };
   const goalKey = `${goal.x},${goal.y}`;
   const atTileCenter = Math.abs((enemy.x - 7) / size - Math.round((enemy.x - 7) / size)) < 0.001
     && Math.abs((enemy.y - 5) / size - Math.round((enemy.y - 5) / size)) < 0.001;
   if ((!enemy.route.length && now >= enemy.routeUntil)
     || (atTileCenter && now >= enemy.routeUntil && enemy.routeGoal !== goalKey)) {
-    enemy.route = findEnemyRoute(enemy, goal);
+    enemy.route = findEnemyRoute(enemy, goal, targetEntity);
     enemy.routeGoal = goalKey;
     enemy.routeUntil = now + 400;
   }
@@ -813,7 +876,7 @@ function chasePlayer(enemy, now) {
   const dx = target.x - enemy.x;
   const dy = target.y - enemy.y;
   const distance = Math.hypot(dx, dy);
-  const speed = 0.8;
+  const speed = enemyMoveSpeed(enemy);
   const next = { ...enemy };
   if (distance <= speed) {
     next.x = target.x;
@@ -832,7 +895,7 @@ function chasePlayer(enemy, now) {
   enemy.y = next.y;
 }
 
-function findEnemyRoute(enemy, goal) {
+function findEnemyRoute(enemy, goal, targetEntity = player) {
   const area = areas[currentAreaId];
   const size = config.tileSize;
   const start = {
@@ -860,9 +923,29 @@ function findEnemyRoute(enemy, goal) {
     route.unshift({ x: tile.x * size + 7, y: tile.y * size + 5 });
   }
   // Center within the starting tile before turning through narrow passages.
-  if (route.length === 1) return [{ x: player.x + (player.width - enemy.width) / 2,
-    y: player.y + (player.height - enemy.height) / 2 }];
+  if (route.length === 1) return [{ x: targetEntity.x + (targetEntity.width - enemy.width) / 2,
+    y: targetEntity.y + (targetEntity.height - enemy.height) / 2 }];
   return route;
+}
+
+function enemyMoveSpeed(enemy) {
+  return enemy.visual === "flying" ? 1 : 0.8;
+}
+
+function moveEnemyInCurrentDirection(enemy, now, speed = enemyMoveSpeed(enemy)) {
+  const next = {
+    ...enemy,
+    x: enemy.x + enemy.moveX * speed,
+    y: enemy.y + enemy.moveY * speed
+  };
+  if (collidesWithBlockedTile(next)) {
+    enemy.movingUntil = 0;
+    enemy.waitUntil = now + 200;
+    return;
+  }
+  enemy.x = next.x;
+  enemy.y = next.y;
+  if (enemy.moveX) enemy.facing = Math.sign(enemy.moveX);
 }
 
 function chooseEnemyDirection(enemy) {
@@ -2254,24 +2337,24 @@ function drawEnemy(enemy, cameraX, cameraY) {
 }
 
 function drawRestoredCube(enemy, x, y) {
-  const size = 30;
-  const drawX = x + (enemy.width - size) / 2;
-  const drawY = y + enemy.height - size;
   ctx.save();
-  ctx.fillStyle = "rgba(0,0,0,.2)";
-  ctx.beginPath();
-  ctx.ellipse(x + enemy.width / 2, y + enemy.height, 14, 5, 0, 0, Math.PI * 2);
+  ctx.shadowColor = "rgba(242,201,95,.8)";
+  ctx.shadowBlur = 18;
+  ctx.fillStyle = "#f1ead8";
+  roundRect(x, y, enemy.width, enemy.height, 9);
   ctx.fill();
-  ctx.fillStyle = "#fffdf4";
-  ctx.strokeStyle = "#242129";
-  ctx.lineWidth = 3;
-  ctx.fillRect(drawX, drawY, size, size);
-  ctx.strokeRect(drawX, drawY, size, size);
-  ctx.fillStyle = "#242129";
-  ctx.fillRect(drawX + 7, drawY + 9, 4, 10);
-  ctx.fillRect(drawX + 19, drawY + 9, 4, 10);
   ctx.restore();
-  drawRestoredLabel(x, y - 7);
+
+  ctx.strokeStyle = "#34313b";
+  ctx.lineWidth = 4;
+  ctx.stroke();
+  ctx.fillStyle = "#34313b";
+  const eyeShift = enemy.facing === -1 ? -3 : 3;
+  roundRect(x + 10 + eyeShift, y + 14, 5, 12, 3);
+  ctx.fill();
+  roundRect(x + 24 + eyeShift, y + 14, 5, 12, 3);
+  ctx.fill();
+  drawRestoredLabel(x, y - 10);
 }
 
 function drawRestoredSoul(enemy, x, y) {
