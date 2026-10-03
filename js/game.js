@@ -65,6 +65,7 @@ const playerState = {
   thorns: false,
   strongDefend: false,
   magic: false,
+  hasStaff: false,
   upgrades: {
     damage: 0,
     defense: 0,
@@ -106,6 +107,15 @@ let activeSign = null;
 let bossDialogue = [];
 let bossDialogueIndex = 0;
 let magicMenuOpen = false;
+let activeCastleFeature = null;
+
+const castleState = {
+  exitCleared: false,
+  sitting: false,
+  sittingStartedAt: 0,
+  standX: 0,
+  standY: 0
+};
 
 const storySlides = [
   { title: "The King", text: "Long ago, the Pristine King watched over the cubes and souls of the land.", image: "img/split-path-lore.png" },
@@ -254,7 +264,12 @@ function makePristineCastle() {
   const height = 16;
   const grid = Array.from({ length: height }, (_, row) => Array.from({ length: width }, (_, col) =>
     row === 0 || row === height - 1 || col === 0 || col === width - 1 ? "^" : "."));
-  [[5, 5], [12, 5], [18, 5], [8, 10], [16, 10]].forEach(([x, y]) => { grid[y][x] = "Q"; });
+  grid[2][12] = "H";
+  grid[4][8] = "V";
+  grid[4][16] = "V";
+  grid[6][17] = "D";
+  [[20, 6], [20, 7], [20, 8], [20, 9], [20, 10]].forEach(([x, y]) => { grid[y][x] = "Q"; });
+  [[11, 13], [12, 13], [13, 13]].forEach(([x, y]) => { grid[y][x] = "B"; });
   grid[height - 2][12] = "E";
   return {
     name: "Pristine Castle",
@@ -266,11 +281,11 @@ function makePristineCastle() {
     healed: true,
     enemies: [],
     signs: {
-      "5,5": "Move with WASD or the arrow keys. Hold Shift or X to sprint.",
-      "12,5": "Press Z or Enter near signs, residents, and map locations.",
-      "18,5": "Restore controlled creatures to earn Divine Points.",
-      "8,10": "Open the Divine Path with U to choose permanent upgrades.",
-      "16,10": "The glowing doorway leads to the Kingdom Map."
+      "20,6": "Move with WASD or the arrow keys. Hold Shift or X to sprint.",
+      "20,7": "Press Z or Enter near signs, residents, and map locations.",
+      "20,8": "Restore controlled creatures to earn Divine Points.",
+      "20,9": "Open the Divine Path with U to choose permanent upgrades.",
+      "20,10": "Find your staff before leaving the ruined castle."
     },
     map: grid.map((row) => row.join(""))
   };
@@ -640,6 +655,7 @@ function clearInteractionState() {
   activeEnemy = null;
   activeNode = null;
   activeSign = null;
+  activeCastleFeature = null;
   bossDialogue = [];
   bossDialogueIndex = 0;
   setPrompt("");
@@ -653,6 +669,8 @@ function movePlayer() {
   if (keys.has("arrowright") || keys.has("d")) horizontal += 1;
   if (keys.has("arrowup") || keys.has("w")) vertical -= 1;
   if (keys.has("arrowdown") || keys.has("s")) vertical += 1;
+
+  if ((horizontal || vertical) && castleState.sitting) standFromThrone();
 
   if (horizontal && vertical) {
     horizontal *= 0.707;
@@ -879,7 +897,7 @@ function collidesWithBlockedTile(rect) {
 }
 
 function isBlockedTile(tile) {
-  return !tile || tile === "^" || tile === "T" || tile === "W";
+  return !tile || tile === "^" || tile === "T" || tile === "W" || tile === "H" || tile === "V" || (tile === "B" && !castleState.exitCleared);
 }
 
 function updateCamera() {
@@ -899,6 +917,7 @@ function updateInteractionPrompt() {
   if (promptMode === "boss-dialogue") return;
   activeNode = null;
   activeSign = null;
+  activeCastleFeature = null;
   promptMode = "";
 
   if (gameMode === "kingdom") {
@@ -912,6 +931,20 @@ function updateInteractionPrompt() {
   }
 
   if (gameMode === "area") {
+    const castleFeature = nearbyCastleFeature();
+    if (castleFeature) {
+      activeCastleFeature = castleFeature;
+      promptMode = `castle-${castleFeature}`;
+      const prompts = {
+        throne: playerState.hasStaff ? "Press Z to sit on the throne" : "Press Z to reclaim your staff",
+        rocks: playerState.hasStaff ? "Press Z to shatter the fallen rocks" : "You need your staff to clear these rocks",
+        cloaks: "Press Z to inspect the old cloaks",
+        dagger: "Press Z to inspect the dusty dagger"
+      };
+      setPrompt(prompts[castleFeature]);
+      return;
+    }
+
     const boss = areas[currentAreaId].enemies.find((enemy) => enemy.kind === "boss" && !enemy.restored && rectanglesOverlap(player, enemy));
     if (boss) {
       activeEnemy = boss;
@@ -948,12 +981,13 @@ function updateInteractionPrompt() {
 
 function usePrompt() {
   if (currentScreen !== "game") return;
-  if (promptMode === "enter-area" && activeNode?.unlocked) enterArea(activeNode.areaId);
-  if (promptMode === "leave-area") leaveArea();
-  if (promptMode === "talk") talkToNpc();
-  if (promptMode === "read-sign") readSign();
-  if (promptMode === "challenge-boss") beginBossDialogue();
-  if (promptMode === "boss-dialogue") advanceBossDialogue();
+  if (promptMode === "enter-area" && activeNode?.unlocked) return enterArea(activeNode.areaId);
+  if (promptMode === "leave-area") return leaveArea();
+  if (promptMode === "talk") return talkToNpc();
+  if (promptMode === "read-sign") return readSign();
+  if (promptMode === "challenge-boss") return beginBossDialogue();
+  if (promptMode === "boss-dialogue") return advanceBossDialogue();
+  if (promptMode.startsWith("castle-")) interactWithCastle(activeCastleFeature);
 }
 
 function setPrompt(text) {
@@ -1032,6 +1066,70 @@ function nearbySign() {
   }) || null;
 }
 
+function nearbyCastleFeature() {
+  if (currentAreaId !== "pristineCastle") return null;
+  const playerCol = Math.floor((player.x + player.width / 2) / config.tileSize);
+  const playerRow = Math.floor((player.y + player.height / 2) / config.tileSize);
+  const near = (x, y, radius = 1) => Math.abs(x - playerCol) <= radius && Math.abs(y - playerRow) <= radius;
+
+  if (near(12, 2)) return "throne";
+  if (!castleState.exitCleared && ([11, 12, 13].some((x) => near(x, 13)))) return "rocks";
+  if ([[19, 2], [20, 2], [21, 2]].some(([x, y]) => near(x, y))) return "cloaks";
+  if (playerCol === 17 && playerRow === 6) return "dagger";
+  return null;
+}
+
+function interactWithCastle(feature) {
+  if (feature === "throne") {
+    if (!playerState.hasStaff) {
+      playerState.hasStaff = true;
+      updateBattleActions();
+      showTemporaryPrompt("You reclaim the Pristine Staff. Its light still answers you.");
+      return;
+    }
+    if (castleState.sitting) standFromThrone();
+    else sitOnThrone();
+    return;
+  }
+
+  if (feature === "rocks") {
+    if (!playerState.hasStaff) {
+      showTemporaryPrompt("The rocks will not move. You need your staff.");
+      return;
+    }
+    castleState.exitCleared = true;
+    showTemporaryPrompt("The staff flashes. The fallen rocks break apart!");
+    return;
+  }
+
+  if (feature === "cloaks") showTemporaryPrompt("they dont seem to fit you.");
+  if (feature === "dagger") showTemporaryPrompt("its covered in dust.");
+}
+
+function sitOnThrone() {
+  castleState.standX = player.x;
+  castleState.standY = player.y;
+  castleState.sitting = true;
+  castleState.sittingStartedAt = performance.now();
+  player.x = 12 * config.tileSize + 2;
+  player.y = 2 * config.tileSize - 4;
+  player.view = "front";
+  showTemporaryPrompt("The throne remembers its King.", 1800);
+}
+
+function standFromThrone() {
+  if (!castleState.sitting) return;
+  castleState.sitting = false;
+  player.x = castleState.standX;
+  player.y = castleState.standY;
+}
+
+function showTemporaryPrompt(message, duration = 3000) {
+  dialogueUntil = performance.now() + duration;
+  setPrompt(message);
+  window.setTimeout(updateInteractionPrompt, duration);
+}
+
 function readSign() {
   if (!activeSign) return;
   dialogueUntil = performance.now() + 5000;
@@ -1074,6 +1172,7 @@ function distanceToPoint(x, y) {
 }
 
 function isPlayerOnExit() {
+  if (currentAreaId === "pristineCastle" && !castleState.exitCleared) return false;
   return tileAt(player.x + player.width / 2, player.y + player.height / 2) === "E";
 }
 
@@ -1130,6 +1229,11 @@ function setBattleButtons(disabled) {
   document.querySelectorAll(".battle-actions button").forEach((button) => {
     button.disabled = disabled;
   });
+  if (!playerState.hasStaff) {
+    document.querySelector("#attack-action").disabled = true;
+    document.querySelector("#light-spell-action").disabled = true;
+    document.querySelector("#soul-spell-action").disabled = true;
+  }
 }
 
 function updateBattleActions() {
@@ -1137,6 +1241,7 @@ function updateBattleActions() {
   document.querySelector("#attack-action").setAttribute("aria-expanded", String(playerState.magic && magicMenuOpen));
   document.querySelector("#light-spell-action").classList.toggle("hidden", !playerState.magic || !magicMenuOpen);
   document.querySelector("#soul-spell-action").classList.toggle("hidden", !playerState.magic || !magicMenuOpen);
+  document.querySelector("#attack-action").disabled = battleBusy || !playerState.hasStaff;
 }
 
 function playBattleEffect(name) {
@@ -1217,6 +1322,10 @@ function revivePlayerAtAreaStart() {
 
 function attackAction() {
   if (battleBusy || !activeEnemy) return;
+  if (!playerState.hasStaff) {
+    document.querySelector("#battle-message").textContent = "You need the Pristine Staff to attack.";
+    return;
+  }
   if (playerState.magic) {
     magicMenuOpen = !magicMenuOpen;
     updateBattleActions();
@@ -1454,7 +1563,15 @@ function resetGame() {
     lifeSteal: 0,
     thorns: false,
     strongDefend: false,
-    magic: false
+    magic: false,
+    hasStaff: false
+  });
+  Object.assign(castleState, {
+    exitCleared: false,
+    sitting: false,
+    sittingStartedAt: 0,
+    standX: 0,
+    standY: 0
   });
   Object.assign(playerState.upgrades, {
     damage: 0,
@@ -1616,9 +1733,14 @@ function drawAreaMap() {
   }
 
   drawAreaRocks(area, cameraX, cameraY);
+  if (currentAreaId === "pristineCastle") drawCastleWallDecorations(cameraX, cameraY);
   area.enemies.filter((enemy) => !enemy.relocated).forEach((enemy) => drawEnemy(enemy, cameraX, cameraY));
   drawVillageResidents(cameraX, cameraY);
-  const subtitle = area.signs
+  const subtitle = currentAreaId === "pristineCastle"
+    ? playerState.hasStaff
+      ? castleState.exitCleared ? "The road to the kingdom is open." : "Use the staff to clear the fallen rocks."
+      : "Search the ruined throne room for your staff."
+    : area.signs
     ? "Read the signs, then leave through the glowing doorway."
     : villageSourceFor(currentAreaId)
       ? "Restored residents gather here."
@@ -1688,13 +1810,42 @@ function drawTile(tile, x, y, healed, areaId) {
   if (tile === "S") drawTinyShrine(x + 8, y + 6);
 
   if (tile === "Q") {
-    ctx.fillStyle = "#8d6237";
-    ctx.fillRect(x + 20, y + 21, 8, 25);
-    ctx.fillStyle = "#f2c95f";
-    ctx.fillRect(x + 5, y + 6, size - 10, 24);
-    ctx.strokeStyle = "#34313b";
+    ctx.fillStyle = "#66503a";
+    ctx.fillRect(x + 21, y + 22, 7, 24);
+    ctx.fillStyle = "#8c8069";
+    ctx.beginPath();
+    ctx.moveTo(x + 6, y + 8);
+    ctx.lineTo(x + 39, y + 5);
+    ctx.lineTo(x + 43, y + 25);
+    ctx.lineTo(x + 28, y + 29);
+    ctx.lineTo(x + 22, y + 25);
+    ctx.lineTo(x + 7, y + 30);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = "#4a433a";
     ctx.lineWidth = 3;
-    ctx.strokeRect(x + 5, y + 6, size - 10, 24);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x + 13, y + 14);
+    ctx.lineTo(x + 35, y + 12);
+    ctx.moveTo(x + 11, y + 21);
+    ctx.lineTo(x + 30, y + 19);
+    ctx.stroke();
+  }
+
+  if (tile === "H") drawCastleThrone(x, y);
+  if (tile === "V") drawFallenKingStatue(x, y);
+  if (tile === "D") drawDustyDagger(x, y);
+
+  if (tile === "B" && !castleState.exitCleared) {
+    drawFallbackRock(x - 5, y + 4, 58, 48);
+    ctx.strokeStyle = "#4c4653";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x + 15, y + 13);
+    ctx.lineTo(x + 26, y + 25);
+    ctx.lineTo(x + 20, y + 37);
+    ctx.stroke();
   }
 
   if (tile === "E") {
@@ -1708,6 +1859,97 @@ function drawTile(tile, x, y, healed, areaId) {
   ctx.strokeStyle = "rgba(243,238,225,.05)";
   ctx.lineWidth = 1;
   if (!grassy) ctx.strokeRect(x, y, size, size);
+}
+
+function drawCastleThrone(x, y) {
+  ctx.fillStyle = "#4b394b";
+  ctx.fillRect(x + 4, y - 8, 40, 54);
+  ctx.fillStyle = "#8e263f";
+  ctx.fillRect(x + 10, y - 2, 28, 39);
+  ctx.fillStyle = "#c59c42";
+  ctx.fillRect(x + 2, y + 32, 44, 10);
+  ctx.fillRect(x + 5, y - 12, 7, 60);
+  ctx.fillRect(x + 36, y - 12, 7, 60);
+  ctx.strokeStyle = "#29232c";
+  ctx.lineWidth = 3;
+  ctx.strokeRect(x + 4, y - 8, 40, 54);
+
+  if (!playerState.hasStaff) {
+    ctx.strokeStyle = "#f2d93d";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(x + 38, y - 7);
+    ctx.lineTo(x + 26, y + 33);
+    ctx.moveTo(x + 34, y - 6);
+    ctx.lineTo(x + 42, y - 11);
+    ctx.lineTo(x + 43, y - 2);
+    ctx.stroke();
+  }
+}
+
+function drawFallenKingStatue(x, y) {
+  ctx.save();
+  ctx.translate(x + 2, y + 34);
+  ctx.rotate(-0.52);
+  ctx.fillStyle = "#918b91";
+  ctx.strokeStyle = "#4d4952";
+  ctx.lineWidth = 3;
+  ctx.fillRect(0, -15, 45, 27);
+  ctx.strokeRect(0, -15, 45, 27);
+  ctx.beginPath();
+  ctx.arc(38, -2, 14, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(9, -14);
+  ctx.lineTo(18, -3);
+  ctx.lineTo(13, 9);
+  ctx.moveTo(29, -13);
+  ctx.lineTo(25, -1);
+  ctx.lineTo(34, 8);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawDustyDagger(x, y) {
+  ctx.save();
+  ctx.translate(x + 13, y + 10);
+  ctx.rotate(Math.PI / 4);
+  ctx.fillStyle = "#a7a4a0";
+  ctx.strokeStyle = "#3c3940";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(8, 0);
+  ctx.lineTo(15, 26);
+  ctx.lineTo(8, 36);
+  ctx.lineTo(1, 26);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = "#6e4f2c";
+  ctx.fillRect(4, -9, 8, 12);
+  ctx.fillRect(-1, 1, 18, 5);
+  ctx.restore();
+}
+
+function drawCastleWallDecorations(cameraX, cameraY) {
+  [19, 20, 21].forEach((col, index) => {
+    const x = col * config.tileSize - cameraX + 7;
+    const y = 2 * config.tileSize - cameraY - 5;
+    ctx.fillStyle = ["#594361", "#68464f", "#465769"][index];
+    ctx.strokeStyle = "#302b35";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(x + 17, y);
+    ctx.quadraticCurveTo(x + 3, y + 15, x + 7, y + 43);
+    ctx.lineTo(x + 29, y + 43);
+    ctx.quadraticCurveTo(x + 33, y + 15, x + 17, y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#a99058";
+    ctx.fillRect(x + 5, y - 4, 25, 4);
+  });
 }
 
 function drawAreaRocks(area, cameraX, cameraY) {
@@ -1764,14 +2006,15 @@ function drawPlayer() {
   const camera = gameMode === "kingdom" ? kingdomMap : areas[currentAreaId];
   const screenX = player.x - camera.cameraX;
   const screenY = player.y - camera.cameraY;
+  const sitProgress = castleState.sitting ? Math.min(1, (performance.now() - castleState.sittingStartedAt) / 260) : 0;
   const spriteScale = 0.72;
   const spriteWidth = 78 * spriteScale;
   const spriteHeight = 132 * spriteScale;
   const drawX = screenX + player.width / 2 - spriteWidth / 2;
-  const drawY = screenY + player.height - spriteHeight + 8;
+  const drawY = screenY + player.height - spriteHeight + 8 + sitProgress * 24;
   ctx.save();
   ctx.translate(drawX + (player.facing === -1 ? spriteWidth : 0), drawY);
-  ctx.scale(player.facing * spriteScale, spriteScale);
+  ctx.scale(player.facing * spriteScale, spriteScale * (1 - sitProgress * 0.2));
   const x = 0;
   const y = 0;
   ctx.strokeStyle = "#201f25";
@@ -1945,7 +2188,13 @@ function drawEnemy(enemy, cameraX, cameraY) {
     return;
   }
 
-  const sprite = enemy.originArea === "sylvan" ? readySylvanSprite(enemy.visual, enemy.restored) : null;
+  if (enemy.restored) {
+    if (enemy.visual === "flying") drawRestoredSoul(enemy, x, y);
+    else drawRestoredCube(enemy, x, y);
+    return;
+  }
+
+  const sprite = enemy.originArea === "sylvan" ? readySylvanSprite(enemy.visual) : null;
   if (sprite) {
     const flying = enemy.visual === "flying";
     const width = enemy.width + 6;
@@ -2002,6 +2251,79 @@ function drawEnemy(enemy, cameraX, cameraY) {
     ctx.fillStyle = "#f3eee1";
     ctx.fillText(`Lv ${enemy.level}`, x - 2, y - 10);
   }
+}
+
+function drawRestoredCube(enemy, x, y) {
+  const size = 30;
+  const drawX = x + (enemy.width - size) / 2;
+  const drawY = y + enemy.height - size;
+  ctx.save();
+  ctx.fillStyle = "rgba(0,0,0,.2)";
+  ctx.beginPath();
+  ctx.ellipse(x + enemy.width / 2, y + enemy.height, 14, 5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#fffdf4";
+  ctx.strokeStyle = "#242129";
+  ctx.lineWidth = 3;
+  ctx.fillRect(drawX, drawY, size, size);
+  ctx.strokeRect(drawX, drawY, size, size);
+  ctx.fillStyle = "#242129";
+  ctx.fillRect(drawX + 7, drawY + 9, 4, 10);
+  ctx.fillRect(drawX + 19, drawY + 9, 4, 10);
+  ctx.restore();
+  drawRestoredLabel(x, y - 7);
+}
+
+function drawRestoredSoul(enemy, x, y) {
+  const hover = 9 + Math.sin(performance.now() / 260 + enemy.level) * 2;
+  const centerX = x + enemy.width / 2;
+  const baseY = y + enemy.height - hover;
+  ctx.save();
+  ctx.fillStyle = "rgba(0,0,0,.2)";
+  ctx.beginPath();
+  ctx.ellipse(centerX, y + enemy.height, 14, 5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.translate(centerX, baseY);
+  ctx.scale(enemy.facing || 1, 1);
+  ctx.fillStyle = "#f4e84c";
+  ctx.strokeStyle = "#242129";
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(-12, -19);
+  ctx.quadraticCurveTo(-18, -6, -15, 12);
+  ctx.quadraticCurveTo(0, 18, 15, 12);
+  ctx.quadraticCurveTo(18, -6, 12, -19);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = "#fffdf4";
+  ctx.fillRect(-11, -30, 22, 16);
+  ctx.strokeRect(-11, -30, 22, 16);
+  ctx.fillStyle = "#242129";
+  ctx.fillRect(-6, -25, 3, 7);
+  ctx.fillRect(4, -25, 3, 7);
+  ctx.strokeStyle = "#f2d93d";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(-8, -29);
+  ctx.lineTo(-17, -34);
+  ctx.lineTo(-20, -42);
+  ctx.moveTo(-16, -34);
+  ctx.lineTo(-23, -35);
+  ctx.moveTo(8, -29);
+  ctx.lineTo(17, -34);
+  ctx.lineTo(20, -42);
+  ctx.moveTo(16, -34);
+  ctx.lineTo(23, -35);
+  ctx.stroke();
+  ctx.restore();
+  drawRestoredLabel(x, y - hover - 17);
+}
+
+function drawRestoredLabel(x, y) {
+  ctx.font = "700 14px Trebuchet MS";
+  ctx.fillStyle = "#f2c95f";
+  ctx.fillText("...", x + 10, y);
 }
 
 function drawVillageResidents(cameraX, cameraY) {
@@ -2165,7 +2487,7 @@ window.addEventListener("keydown", (event) => {
   }
 
   if (key === "z" || key === "enter") usePrompt();
-  if (key === "m" && currentScreen === "game" && gameMode === "area") leaveArea();
+  if (key === "m" && currentScreen === "game" && gameMode === "area" && (currentAreaId !== "pristineCastle" || castleState.exitCleared)) leaveArea();
   if (key === "u" && currentScreen === "game") {
     updateUpgradeButtons();
     showScreen("upgrades");
