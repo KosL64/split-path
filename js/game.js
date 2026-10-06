@@ -100,6 +100,7 @@ let battleBusy = false;
 let battleTimer = null;
 let contactLockedUntil = 0;
 let dialogueUntil = 0;
+let talkingResident = null;
 let promptMode = "";
 let activeEnemy = null;
 let activeNode = null;
@@ -786,6 +787,8 @@ function relocateRestoredEnemies(areaId) {
 }
 
 function clearInteractionState() {
+  talkingResident = null;
+  dialogueUntil = 0;
   promptMode = "";
   activeEnemy = null;
   activeNode = null;
@@ -852,6 +855,7 @@ function moveEnemies() {
   const area = areas[currentAreaId];
 
   area.enemies.forEach((enemy) => {
+    if (pauseResidentConversation(enemy, enemy, performance.now())) return;
     if (enemy.stationary) return;
     if (enemy.restored) {
       if (!enemy.relocated && enemy.visual === "ground") moveEnemy(enemy);
@@ -866,6 +870,7 @@ function moveVillageResidents() {
   const now = performance.now();
   villageResidents().forEach((resident) => {
     initializeVillageResident(resident);
+    if (pauseResidentConversation(resident, positionedResident(resident), now)) return;
     if (now < resident.villageWaitUntil) return;
     if (now >= resident.villageMovingUntil) {
       const directions = [[1, 0], [-1, 0], [0, 1], [0, -1], [0, 0]];
@@ -894,6 +899,7 @@ function moveVillageResidents() {
 
 function moveEnemy(enemy) {
   const now = performance.now();
+  if (pauseResidentConversation(enemy, enemy, now)) return;
   const restoredTarget = enemy.restored ? null : nearestRestoredCube(enemy, config.tileSize * 4);
 
   if (enemy.restored && enemy.visual === "ground") {
@@ -1295,7 +1301,24 @@ function nearestVillageResident() {
       nearest = { resident, positioned };
     }
   });
+  areas[currentAreaId].enemies.forEach((resident) => {
+    if (!resident.restored || resident.relocated || resident.kind === "boss") return;
+    if (distanceToRect(resident) < 78 && (!nearest || distanceToRect(resident) < distanceToRect(nearest.positioned))) {
+      nearest = { resident, positioned: resident };
+    }
+  });
   return nearest?.resident || null;
+}
+
+function pauseResidentConversation(resident, positioned, now) {
+  if (resident !== talkingResident || now >= dialogueUntil) return false;
+  const dx = player.x + player.width / 2 - (positioned.x + positioned.width / 2);
+  const dy = player.y + player.height / 2 - (positioned.y + positioned.height / 2);
+  const distance = Math.hypot(dx, dy) || 1;
+  resident.gazeX = dx / distance * 3;
+  resident.gazeY = dy / distance * 3;
+  if (dx) resident.facing = Math.sign(dx);
+  return true;
 }
 
 function nearbyVillageHouseDoor() {
@@ -1686,6 +1709,7 @@ function finishRestoration() {
   const remainingEnemies = area.enemies.filter((enemy) => !enemy.restored).length;
   const areaCleared = area.enemies.length > 0 && remainingEnemies === 0;
   area.healed = areaCleared;
+  updatePlainsRestoration();
   updateVillageLocks();
   document.querySelector("#battle-enemy").classList.add("restored");
   document.querySelector("#battle-message").textContent = `RESTORED! You earned ${config.restoreReward} Divine Points.`;
@@ -1709,6 +1733,12 @@ function updateVillageLocks() {
     if (node.kind !== "village") return;
     node.unlocked = true;
   });
+}
+
+function updatePlainsRestoration() {
+  const plains = areas.controlledPlains;
+  plains.name = plains.healed ? "The Ancient Plains" : "Controlled Plains";
+  kingdomMap.nodes.find((node) => node.areaId === "controlledPlains").name = plains.name;
 }
 
 function buyUpgrade(type) {
@@ -1855,6 +1885,8 @@ function resetGame() {
       enemy.routeUntil = 0;
       enemy.talked = false;
       enemy.facing = 1;
+      delete enemy.gazeX;
+      delete enemy.gazeY;
       delete enemy.villageSlot;
       delete enemy.villageX;
       delete enemy.villageY;
@@ -1870,6 +1902,7 @@ function resetGame() {
   kingdomMap.nodes.forEach((node) => {
     node.unlocked = node.kind !== "village";
   });
+  updatePlainsRestoration();
   currentAreaId = "sylvan";
   updateVillageLocks();
   document.querySelector("#attack-action").textContent = "Attack";
@@ -2062,12 +2095,13 @@ function areaPalette(areaId) {
     },
     controlledPlains: {
       controlledBase: "#242631",
-      healedBase: "#405f5b",
+      healedBase: areaId === "controlledPlains" ? "#a9b94c" : "#405f5b",
       floor: "#393944",
-      healedFloor: "#496f59",
+      healedFloor: areaId === "controlledPlains" ? "#bdc85b" : "#496f59",
       wall: "#181820",
       tree: "#252934",
       grass: "#514c62",
+      healedGrass: areaId === "controlledPlains" ? "#e0df70" : "#514c62",
       water: "#252d47",
       houseRoof: "#dd6c7b",
       houseBody: "#f3eee1",
@@ -2120,7 +2154,7 @@ function drawTile(tile, x, y, healed, areaId) {
   }
 
   if (tile === "g") {
-    ctx.fillStyle = healed ? palette.grass : palette.grass;
+    ctx.fillStyle = healed ? palette.healedGrass || palette.grass : palette.grass;
     for (let i = 0; i < 5; i += 1) {
       ctx.fillRect(x + 6 + i * 8, y + 30 - (i % 2) * 7, 5, 12);
     }
@@ -2617,10 +2651,12 @@ function drawRestoredCube(enemy, x, y) {
   ctx.lineWidth = 4;
   ctx.stroke();
   ctx.fillStyle = "#34313b";
-  const eyeShift = enemy.facing === -1 ? -3 : 3;
-  roundRect(x + 10 + eyeShift, y + 14, 5, 12, 3);
+  const talking = enemy === talkingResident && performance.now() < dialogueUntil;
+  const eyeShift = talking ? enemy.gazeX : enemy.facing === -1 ? -3 : 3;
+  const eyeY = y + 14 + (talking ? enemy.gazeY : 0);
+  roundRect(x + 10 + eyeShift, eyeY, 5, 12, 3);
   ctx.fill();
-  roundRect(x + 24 + eyeShift, y + 14, 5, 12, 3);
+  roundRect(x + 24 + eyeShift, eyeY, 5, 12, 3);
   ctx.fill();
   drawRestoredLabel(x, y - 10);
 }
@@ -2635,7 +2671,7 @@ function drawRestoredSoul(enemy, x, y) {
   ctx.ellipse(centerX, y + enemy.height, 14, 5, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.translate(centerX, baseY);
-  ctx.scale(enemy.facing || 1, 1);
+  ctx.scale(1.2, 1.2);
   ctx.fillStyle = "#f4e84c";
   ctx.strokeStyle = "#242129";
   ctx.lineWidth = 2.5;
@@ -2651,24 +2687,27 @@ function drawRestoredSoul(enemy, x, y) {
   ctx.fillRect(-11, -30, 22, 16);
   ctx.strokeRect(-11, -30, 22, 16);
   ctx.fillStyle = "#242129";
-  ctx.fillRect(-6, -25, 3, 7);
-  ctx.fillRect(4, -25, 3, 7);
+  const talking = enemy === talkingResident && performance.now() < dialogueUntil;
+  const eyeX = talking ? enemy.gazeX : (enemy.facing || 1) * 2;
+  const eyeY = talking ? enemy.gazeY : 0;
+  ctx.fillRect(-6 + eyeX, -25 + eyeY, 3, 7);
+  ctx.fillRect(4 + eyeX, -25 + eyeY, 3, 7);
   ctx.strokeStyle = "#f2d93d";
   ctx.lineWidth = 3;
   ctx.beginPath();
   ctx.moveTo(-8, -29);
-  ctx.lineTo(-17, -34);
-  ctx.lineTo(-20, -42);
-  ctx.moveTo(-16, -34);
-  ctx.lineTo(-23, -35);
+  ctx.lineTo(-13, -32);
+  ctx.lineTo(-15, -36);
+  ctx.moveTo(-13, -32);
+  ctx.lineTo(-17, -33);
   ctx.moveTo(8, -29);
-  ctx.lineTo(17, -34);
-  ctx.lineTo(20, -42);
-  ctx.moveTo(16, -34);
-  ctx.lineTo(23, -35);
+  ctx.lineTo(13, -32);
+  ctx.lineTo(15, -36);
+  ctx.moveTo(13, -32);
+  ctx.lineTo(17, -33);
   ctx.stroke();
   ctx.restore();
-  drawRestoredLabel(x, y - hover - 17);
+  drawRestoredLabel(x, baseY - 50);
 }
 
 function drawRestoredLabel(x, y) {
@@ -2791,7 +2830,11 @@ function gameLoop(time) {
 
 function talkToNpc() {
   if (currentScreen === "game" && promptMode === "talk") {
+    if (!activeEnemy?.restored) return;
+    talkingResident = activeEnemy;
     dialogueUntil = performance.now() + 4500;
+    const positioned = activeEnemy.relocated ? positionedResident(activeEnemy) : activeEnemy;
+    pauseResidentConversation(activeEnemy, positioned, performance.now());
     if (activeEnemy?.visual === "flying") {
       setPrompt(activeEnemy.talked
         ? "hey... you look kind of familiar. I don't know. probably just my head."
