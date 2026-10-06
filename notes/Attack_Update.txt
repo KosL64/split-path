@@ -1,5 +1,7 @@
-hey, this update is gonna be for attack. 
+ok. this is good, but also bad.
 
-1. make soul spell, do 2 damage, but stun the enemy for 2 turns. It can only be used once per battle. once it gets used, make it crossed out in dark purple, but still readable. 
+1. make it like in Undertale. when you attack, if you press when the curser thing is in the middle, you do more damage. if you press z in the quick time, IN THE EXACT MIDDLE, the attack does 25% more damage, instead of 20%
 
-2. after an attack, add a 1 second period where if Z is pressed, the attack does X 1.2. so... if an attack did 10 damage, press Z in the 1 second period, then the 10 damage attack, would do 12 damage. THATS JUST AN EXAMPLE!!! also... if an attack ends up becoming a decimal, like... if an attack did 3 damage, 20% of 3 is just... like... 1.5... just... round it to the nearest 1's place.
+2. (MAJOR BUG) there is a bug. whenever you fight the level 8, you can instantly kill it, and then once you press return from he divine point menu, then it brings you back to the fight. no matter what you do, if you heal, defend, attack, it just insta-kills the enemy. i don't know why, but... please get rid of that IN WHATEVER WAY POSSIBE (please don't break the game fixing that XD)
+
+3. so... when your in that animation, make it faster. it feels kinda slow... so... instead of 1 second, make it 0.5 seconds. 
