@@ -423,6 +423,63 @@ meter {
   font-weight: 800;
 }
 
+#soul-spell-action.spell-used:disabled {
+  color: #59366f;
+  background: #e0d5e7;
+  border-color: #59366f;
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+  opacity: 1;
+}
+
+#attack-timing {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  margin-bottom: 12px;
+  visibility: hidden;
+}
+
+#attack-timing.timing-open {
+  visibility: visible;
+}
+
+#attack-boost {
+  flex-shrink: 0;
+  color: #17171d;
+  background: #f2c95f;
+  border-color: #f2c95f;
+}
+
+#attack-boost kbd {
+  margin-left: 6px;
+  font: inherit;
+}
+
+.attack-timing-track {
+  flex: 1;
+  min-width: 24px;
+  height: 8px;
+  overflow: hidden;
+  background: #34313b;
+}
+
+.attack-timing-track span {
+  display: block;
+  height: 100%;
+  background: #f2c95f;
+  transform-origin: left;
+}
+
+.timing-open .attack-timing-track span {
+  animation: attack-countdown 1s linear forwards;
+}
+
+@keyframes attack-countdown {
+  to { transform: scaleX(0); }
+}
+
 .battle-actions {
   display: flex;
   gap: 12px;

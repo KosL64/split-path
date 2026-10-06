@@ -98,6 +98,10 @@ let animationFrameId = null;
 let battleDefending = false;
 let battleBusy = false;
 let battleTimer = null;
+let attackTimingTimer = null;
+let pendingAttack = null;
+let soulSpellUsed = false;
+let enemyStunTurns = 0;
 let contactLockedUntil = 0;
 let dialogueUntil = 0;
 let talkingResident = null;
@@ -1470,6 +1474,10 @@ function checkAreaEncounters() {
 
 function startBattle(enemy) {
   if (enemy.restored || battleBusy) return;
+  clearAttackTiming();
+  window.clearTimeout(battleTimer);
+  soulSpellUsed = false;
+  enemyStunTurns = 0;
   activeEnemy = enemy;
   battleBusy = false;
   battleDefending = false;
@@ -1489,6 +1497,7 @@ function startBattle(enemy) {
     : `A level ${enemy.level} controlled cube lashes out. Purify it with your attacks.`;
   updateBattleActions();
   showScreen("battle");
+  setBattleButtons(false);
   updateBattleStats();
 }
 
@@ -1513,6 +1522,7 @@ function setBattleButtons(disabled) {
     document.querySelector("#light-spell-action").disabled = true;
     document.querySelector("#soul-spell-action").disabled = true;
   }
+  updateBattleActions();
 }
 
 function updateBattleActions() {
@@ -1521,6 +1531,11 @@ function updateBattleActions() {
   document.querySelector("#light-spell-action").classList.toggle("hidden", !playerState.magic || !magicMenuOpen);
   document.querySelector("#soul-spell-action").classList.toggle("hidden", !playerState.magic || !magicMenuOpen);
   document.querySelector("#attack-action").disabled = battleBusy || !playerState.hasStaff;
+  document.querySelector("#light-spell-action").disabled = battleBusy || !playerState.hasStaff || !playerState.magic;
+  const soulButton = document.querySelector("#soul-spell-action");
+  soulButton.disabled = battleBusy || !playerState.hasStaff || !playerState.magic || soulSpellUsed;
+  soulButton.classList.toggle("spell-used", soulSpellUsed);
+  soulButton.setAttribute("aria-label", soulSpellUsed ? "Soul Spell, already used this battle" : "Soul Spell");
 }
 
 function playBattleEffect(name) {
@@ -1531,6 +1546,13 @@ function playBattleEffect(name) {
 }
 
 function enemyTurn() {
+  if (enemyStunTurns > 0) {
+    enemyStunTurns -= 1;
+    battleDefending = false;
+    document.querySelector("#battle-message").textContent += " The enemy is stunned and cannot attack.";
+    setBattleButtons(false);
+    return;
+  }
   const critical = rollCriticalHit();
   const baseDamage = Math.max(1, activeEnemy.attack - playerState.defense - (battleDefending ? 2 : 0));
   const guardedCritical = critical && !(battleDefending && playerState.strongDefend);
@@ -1574,6 +1596,7 @@ function rollCriticalHit() {
 }
 
 function showLoseScreen() {
+  clearAttackTiming();
   window.clearTimeout(battleTimer);
   setBattleButtons(false);
   showScreen("lose");
@@ -1619,7 +1642,7 @@ function attackAction() {
 }
 
 function lightSpellAction() {
-  if (battleBusy || !activeEnemy) return;
+  if (battleBusy || !activeEnemy || !playerState.magic || !playerState.hasStaff) return;
   magicMenuOpen = false;
   updateBattleActions();
   performPlayerAttack({
@@ -1631,33 +1654,67 @@ function lightSpellAction() {
 }
 
 function soulSpellAction() {
-  if (battleBusy || !activeEnemy) return;
+  if (battleBusy || !activeEnemy || soulSpellUsed || !playerState.magic || !playerState.hasStaff) return;
+  soulSpellUsed = true;
+  enemyStunTurns = 2;
   magicMenuOpen = false;
   updateBattleActions();
   performPlayerAttack({
     name: "Soul Spell",
     verb: "Your soul spell",
-    attackPower: Math.max(1, currentAttackPower() - 1),
-    extraHeal: 2
+    fixedDamage: 2,
+    extraHeal: 0
   });
 }
 
 function performPlayerAttack(action) {
   setBattleButtons(true);
   playBattleEffect("attack-effect");
-  const critical = rollCriticalHit();
+  const critical = action.fixedDamage === undefined && rollCriticalHit();
   const attackPower = action.attackPower;
-  const power = damageAfterEnemyDefense(critical ? attackPower * 2 : attackPower, activeEnemy.defense);
+  const power = action.fixedDamage ?? damageAfterEnemyDefense(critical ? attackPower * 2 : attackPower, activeEnemy.defense);
   activeEnemy.control = Math.max(0, activeEnemy.control - power);
-  const lifeStealHeal = playerState.lifeSteal ? Math.max(1, Math.round(power / 2)) : 0;
-  const totalHeal = lifeStealHeal + action.extraHeal;
-  if (totalHeal) {
-    playerState.health = Math.min(playerState.maxHealth, playerState.health + totalHeal);
-  }
   document.querySelector("#battle-message").textContent = critical
     ? `Critical hit! ${action.verb} reduces Control by ${power}.`
     : `${action.verb} reduces Control by ${power}.`;
+  if (action.fixedDamage !== undefined) document.querySelector("#battle-message").textContent += " Stunned for 2 turns.";
+  updateBattleStats();
+
+  pendingAttack = { power, extraHeal: action.extraHeal, deadline: performance.now() + 1000 };
+  const timing = document.querySelector("#attack-timing");
+  timing.classList.remove("timing-open");
+  void timing.offsetWidth;
+  timing.classList.add("timing-open");
+  document.querySelector("#attack-boost").disabled = false;
+  attackTimingTimer = window.setTimeout(resolvePlayerAttack, 1000);
+}
+
+function boostPlayerAttack() {
+  if (currentScreen !== "battle" || !pendingAttack || performance.now() >= pendingAttack.deadline) return;
+  const boostedPower = Math.round(pendingAttack.power * 1.2);
+  activeEnemy.control = Math.max(0, activeEnemy.control - (boostedPower - pendingAttack.power));
+  pendingAttack.power = boostedPower;
+  document.querySelector("#battle-message").textContent = `Boosted! Your attack reduces Control by ${boostedPower}.`;
+  updateBattleStats();
+  resolvePlayerAttack();
+}
+
+function clearAttackTiming() {
+  window.clearTimeout(attackTimingTimer);
+  attackTimingTimer = null;
+  pendingAttack = null;
+  document.querySelector("#attack-timing").classList.remove("timing-open");
+  document.querySelector("#attack-boost").disabled = true;
+}
+
+function resolvePlayerAttack() {
+  if (!pendingAttack) return;
+  const { power, extraHeal } = pendingAttack;
+  clearAttackTiming();
+  const lifeStealHeal = playerState.lifeSteal ? Math.max(1, Math.round(power / 2)) : 0;
+  const totalHeal = lifeStealHeal + extraHeal;
   if (totalHeal) {
+    playerState.health = Math.min(playerState.maxHealth, playerState.health + totalHeal);
     document.querySelector("#battle-message").textContent += ` You restore ${totalHeal} health.`;
   }
   updateBattleStats();
@@ -1701,6 +1758,7 @@ function healAction() {
 }
 
 function finishRestoration() {
+  clearAttackTiming();
   window.clearTimeout(battleTimer);
   activeEnemy.restored = true;
   if (activeEnemy.kind !== "boss") initializeVillageResident(activeEnemy);
@@ -1839,6 +1897,11 @@ function updateUpgradeButtons() {
 }
 
 function resetGame() {
+  clearAttackTiming();
+  window.clearTimeout(battleTimer);
+  soulSpellUsed = false;
+  enemyStunTurns = 0;
+  battleBusy = false;
   Object.assign(playerState, {
     divinePoints: 0,
     health: 20,
@@ -2890,6 +2953,7 @@ document.querySelector("#reset-button").addEventListener("click", resetGame);
 document.querySelector("#attack-action").addEventListener("click", attackAction);
 document.querySelector("#light-spell-action").addEventListener("click", lightSpellAction);
 document.querySelector("#soul-spell-action").addEventListener("click", soulSpellAction);
+document.querySelector("#attack-boost").addEventListener("click", boostPlayerAttack);
 document.querySelector("#defend-action").addEventListener("click", defendAction);
 document.querySelector("#heal-action").addEventListener("click", healAction);
 document.querySelectorAll("[data-upgrade]").forEach((button) => {
@@ -2902,6 +2966,12 @@ window.addEventListener("keydown", (event) => {
     event.preventDefault();
   }
   keys.add(key);
+
+  if (currentScreen === "battle" && key === "z") {
+    event.preventDefault();
+    if (!event.repeat) boostPlayerAttack();
+    return;
+  }
 
   if (currentScreen === "lose" && (key === "z" || key === " ")) {
     revivePlayerAtAreaStart();
