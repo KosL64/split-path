@@ -342,7 +342,7 @@ function resolvePlayerAttack() {
   queueEnemyTurn();
 }
 function applyAttackMilestones(hitCount) {
-  if (playerState.wither) { witherAttackCount += hitCount; while (witherAttackCount >= 5) { witherAttackCount -= 5; const damage = Math.round(activeEnemy.controlMax * 0.05); activeEnemy.control = Math.max(0, activeEnemy.control - damage); document.querySelector("#battle-message").textContent += ` Wither removes ${damage} Control.`; } }
+  if (playerState.wither) { witherAttackCount += hitCount; while (witherAttackCount >= 5) { witherAttackCount -= 5; const witherRate = activeEnemy.kind === "boss" ? 0.05 : 0.10; const damage = Math.round(activeEnemy.controlMax * witherRate); activeEnemy.control = Math.max(0, activeEnemy.control - damage); document.querySelector("#battle-message").textContent += ` Wither removes ${damage} Control.`; } }
   if (playerState.healOverTime) { healOverTimeAttackCount += hitCount; while (healOverTimeAttackCount >= 10) { healOverTimeAttackCount -= 10; const heal = Math.round((playerState.maxHealth - playerState.health) * 0.2); if (heal > 0) { playerState.health = Math.min(playerState.maxHealth, playerState.health + heal); document.querySelector("#battle-message").textContent += ` Heal Over Time restores ${heal} health.`; } } }
 }
 function currentAttackPower() {
