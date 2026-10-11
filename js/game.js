@@ -195,9 +195,10 @@ function enemyTurn() {
   }
   const critical = rollCriticalHit();
   const effectiveDefense = Math.round(playerState.defense * (1 + battleDefenseBoost));
-  const baseDamage = Math.max(1, activeEnemy.attack - effectiveDefense - (battleDefending ? 2 : 0));
+  const baseDamage = Math.max(1, activeEnemy.attack - effectiveDefense);
   const guardedCritical = critical && !(battleDefending && playerState.strongDefend);
-  const damage = guardedCritical ? baseDamage * 2 : baseDamage;
+  const incomingDamage = guardedCritical ? baseDamage * 2 : baseDamage;
+  const damage = battleDefending && !guardedCritical ? Math.max(1, Math.round(incomingDamage / 2)) : incomingDamage;
   const thornsDamage = playerState.thorns ? Math.max(1, Math.round(activeEnemy.attack / 4)) : 0;
   battleDefending = false;
   playerState.health = Math.max(0, playerState.health - damage);
