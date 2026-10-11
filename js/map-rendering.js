@@ -110,7 +110,7 @@ function drawAreaMap() {
     }
   }
 
-  drawAreaRocks(area, cameraX, cameraY);
+  if (area.garageHome) drawVillageGarageHouse(area.garageHome.x * config.tileSize - cameraX, area.garageHome.y * config.tileSize - cameraY, palette);`r`n  drawAreaRocks(area, cameraX, cameraY);
   if (currentAreaId === "pristineCastle") drawCastleWallDecorations(cameraX, cameraY);
   area.enemies.filter((enemy) => !enemy.relocated).forEach((enemy) => drawEnemy(enemy, cameraX, cameraY));
   drawVillageResidents(cameraX, cameraY);
@@ -334,31 +334,23 @@ function drawTile(tile, x, y, healed, areaId) {
 }
 
 function drawCastleThrone(x, y) {
+  const left = x - 48;
+  const top = y - 48;
   ctx.fillStyle = "#4b394b";
-  ctx.fillRect(x + 4, y - 8, 40, 54);
+  roundRect(left + 8, top + 8, 128, 132, 10); ctx.fill();
   ctx.fillStyle = "#8e263f";
-  ctx.fillRect(x + 10, y - 2, 28, 39);
+  roundRect(left + 28, top + 30, 88, 88, 8); ctx.fill();
   ctx.fillStyle = "#c59c42";
-  ctx.fillRect(x + 2, y + 32, 44, 10);
-  ctx.fillRect(x + 5, y - 12, 7, 60);
-  ctx.fillRect(x + 36, y - 12, 7, 60);
-  ctx.strokeStyle = "#29232c";
-  ctx.lineWidth = 3;
-  ctx.strokeRect(x + 4, y - 8, 40, 54);
-
+  ctx.fillRect(left + 4, top + 112, 136, 22);
+  ctx.fillRect(left + 12, top + 2, 18, 136);
+  ctx.fillRect(left + 114, top + 2, 18, 136);
+  ctx.strokeStyle = "#29232c"; ctx.lineWidth = 5; ctx.strokeRect(left + 8, top + 8, 128, 132);
   if (!playerState.hasStaff) {
-    ctx.strokeStyle = "#f2d93d";
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(x + 38, y - 7);
-    ctx.lineTo(x + 26, y + 33);
-    ctx.moveTo(x + 34, y - 6);
-    ctx.lineTo(x + 42, y - 11);
-    ctx.lineTo(x + 43, y - 2);
-    ctx.stroke();
+    ctx.strokeStyle = "#f2d93d"; ctx.lineWidth = 6; ctx.beginPath();
+    ctx.moveTo(left + 101, top + 26); ctx.lineTo(left + 70, top + 103);
+    ctx.moveTo(left + 95, top + 22); ctx.lineTo(left + 110, top + 11); ctx.lineTo(left + 113, top + 29); ctx.stroke();
   }
 }
-
 function drawFallenKingStatue(x, y) {
   ctx.save();
   ctx.translate(x + 2, y + 34);
@@ -836,7 +828,19 @@ function drawVillageHouse(x, y, palette) {
   ctx.fillRect(x + 35, y + 20, 9, 10);
   ctx.restore();
 }
-
+function drawVillageGarageHouse(x, y, palette) {
+  const size = config.tileSize;
+  ctx.save();
+  ctx.fillStyle = "rgba(0,0,0,.22)";
+  ctx.beginPath(); ctx.ellipse(x + size * 1.5, y + size * 2 + 5, size * 1.65, 10, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = palette.houseRoof; ctx.strokeStyle = "#242129"; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.moveTo(x + size * 1.5, y - 28); ctx.lineTo(x - 10, y + 24); ctx.lineTo(x + size * 3 + 10, y + 24); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = palette.houseBody; roundRect(x, y + 22, size * 3, size * 1.75, 6); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = palette.door; ctx.fillRect(x + size * .25, y + size * 1.1, size * .42, size * .65);
+  ctx.fillStyle = "#62727a"; ctx.fillRect(x + size * 1.25, y + size * .82, size * 1.45, size * .93);
+  ctx.strokeStyle = "#2a3137"; ctx.lineWidth = 3; ctx.strokeRect(x + size * 1.25, y + size * .82, size * 1.45, size * .93);
+  ctx.restore();
+}
 function drawTree(x, y, scale, leafColor = "#7ac878") {
   ctx.fillStyle = "#6b4f22";
   ctx.fillRect(x + 15 * scale, y + 25 * scale, 8 * scale, 22 * scale);

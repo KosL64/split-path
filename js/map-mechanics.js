@@ -667,7 +667,7 @@ function collidesWithBlockedTile(rect) {
 }
 
 function isBlockedTile(tile) {
-  return !tile || tile === "^" || tile === "T" || tile === "W" || tile === "H" || tile === "V" || tile === "h" || (tile === "B" && !castleState.exitCleared);
+  return !tile || tile === "^" || tile === "T" || tile === "W" || tile === "H" || tile === "K" || tile === "V" || tile === "h" || tile === "L" || (tile === "B" && !castleState.exitCleared);
 }
 
 function updateCamera() {

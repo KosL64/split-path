@@ -58,6 +58,8 @@ function makePristineCastle() {
   const grid = Array.from({ length: height }, (_, row) => Array.from({ length: width }, (_, col) =>
     row === 0 || row === height - 1 || col === 0 || col === width - 1 ? "^" : "."));
   grid[2][12] = "H";
+  [[11, 1], [12, 1], [13, 1], [11, 2], [13, 2], [11, 3], [12, 3], [13, 3]].forEach(([x, y]) => { grid[y][x] = "K"; });
+  [[11, 1], [12, 1], [13, 1], [11, 2], [13, 2], [11, 3], [12, 3], [13, 3]].forEach(([x, y]) => { grid[y][x] = "K"; });
   grid[4][8] = "V";
   grid[4][16] = "V";
   grid[6][17] = "D";
@@ -258,35 +260,24 @@ function makeVillageArea(name, areaId, homeCount) {
   const height = sylvan ? 18 : 20;
   const grid = createAreaGrid(width, height, "^", sylvan ? "T" : "R");
   const homeSlots = [];
-  const columns = sylvan ? [5, 10, 15, 20, 25] : [5, 10, 15, 20, 25, 30];
-  const rows = sylvan ? [4, 8, 12, 15] : [4, 7, 10, 13, 16, 18];
+  const houseLayout = sylvan
+    ? [[5, 4], [9, 4], [15, 4], [21, 5], [6, 7], [12, 7], [25, 7], [4, 10], [10, 10], [17, 10], [22, 10], [27, 10], [7, 13], [14, 13], [19, 13], [25, 13], [5, 15], [12, 15], [23, 15], [28, 15]]
+    : [[5, 4], [9, 4], [13, 4], [25, 4], [30, 4], [6, 7], [11, 7], [15, 7], [24, 7], [28, 7], [4, 10], [8, 10], [14, 10], [20, 10], [26, 10], [31, 10], [6, 13], [12, 13], [17, 13], [23, 13], [29, 13], [5, 16], [10, 16], [15, 16], [24, 16], [28, 16], [31, 16], [8, 18], [18, 18], [26, 18], [31, 18]];
+  const garageHome = sylvan ? { x: 17, y: 4 } : { x: 18, y: 3 };
 
-  rows.forEach((row, rowIndex) => {
-    columns.forEach((col, colIndex) => {
-      if (homeSlots.length >= homeCount) return;
-      const houseY = Math.max(2, row - 1);
-      grid[houseY][col] = "h";
-      grid[row][col] = "d";
-      if ((rowIndex + colIndex) % 2 === 0 && grid[row]?.[col + 1]) grid[row][col + 1] = "g";
-      homeSlots.push({ x: col, y: row, label: `${name} Home ${homeSlots.length + 1}` });
-    });
+  houseLayout.slice(0, homeCount).forEach(([col, row], index) => {
+    const houseY = Math.max(2, row - 1);
+    grid[houseY][col] = "h";
+    grid[row][col] = "d";
+    if (index % 3 === 0 && grid[row]?.[col + 1]) grid[row][col + 1] = "g";
+    homeSlots.push({ x: col, y: row, label: `${name} Home ${index + 1}` });
   });
 
+  fillRectTiles(grid, garageHome.x, garageHome.y, 3, 2, "L");
+  homeSlots.push({ x: garageHome.x + 1, y: garageHome.y + 2, label: `${name} Garage House` });
   setTiles(grid, sylvan ? [[3, 5], [28, 7], [3, 13], [28, 14]] : [[3, 5], [32, 7], [4, 15], [31, 16]], "T");
   grid[height - 3][Math.floor(width / 2)] = "E";
   grid[Math.floor(height / 2)][3] = "S";
 
-  return {
-    name,
-    width,
-    height,
-    start: { x: Math.floor(width / 2), y: height - 4 },
-    cameraX: 0,
-    cameraY: 0,
-    healed: true,
-    enemies: [],
-    villageTheme: areaId,
-    homeSlots,
-    map: finishAreaGrid(grid)
-  };
+  return { name, width, height, start: { x: Math.floor(width / 2), y: height - 4 }, cameraX: 0, cameraY: 0, healed: true, enemies: [], villageTheme: areaId, homeSlots, garageHome, map: finishAreaGrid(grid) };
 }
