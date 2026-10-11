@@ -88,6 +88,9 @@
           <button id="soul-spell-action" class="hidden">Soul Spell</button>
           <button id="defend-action">Defend</button>
           <button id="heal-action">Heal</button>
+          <button id="heal-now-action" class="hidden">Heal</button>
+          <button id="strengthen-attack-action" class="hidden">Strengthen: Attack</button>
+          <button id="strengthen-defense-action" class="hidden">Strengthen: Defense</button>
         </div>
       </div>
     </section>
@@ -111,6 +114,17 @@
         </div>
 
         <div class="divine-tree" aria-label="Divine Path upgrade tree">
+          <div class="tree-row tree-row-tier3">
+            <button class="tree-node node-tier3 path-damage" data-upgrade="critRate" data-tooltip="Improves your chance of critical hits."><strong>A</strong><span>Crit Rate</span><small>15 DP</small></button>
+            <button class="tree-node node-tier3 path-damage" data-upgrade="doubleAttack" data-tooltip="Chance to attack twice."><strong>A</strong><span>Double Attack</span><small>15 DP</small></button>
+            <button class="tree-node node-tier3 path-damage" data-upgrade="lightSpell2" data-tooltip="Improves Light Spell."><strong>M</strong><span>Light Spell 2</span><small>15 DP</small></button>
+            <button class="tree-node node-tier3 path-damage" data-upgrade="soulSpell2" data-tooltip="Improves Soul Spell."><strong>M</strong><span>Soul Spell 2</span><small>15 DP</small></button>
+            <button class="tree-node node-tier3 path-health" data-upgrade="wither" data-tooltip="Attacks gradually weaken enemies."><strong>H</strong><span>Wither</span><small>15 DP</small></button>
+            <button class="tree-node node-tier3 path-health" data-upgrade="higherHealth" data-tooltip="Health buff."><strong>H</strong><span>Higher Health</span><small>15 DP</small></button>
+            <button class="tree-node node-tier3 path-health" data-upgrade="strengthen" data-tooltip="Attack or Defense buff."><strong>H</strong><span>Strengthen</span><small>15 DP</small></button>
+            <button class="tree-node node-tier3 path-health" data-upgrade="healOverTime" data-tooltip="Gradual healing."><strong>H</strong><span>Heal Over Time</span><small>15 DP</small></button>
+            <button class="tree-node node-tier3 path-defense" data-upgrade="dodge" data-tooltip="Chance to dodge attacks."><strong>D</strong><span>Dodge</span><small>15 DP</small></button>
+          </div>
           <div class="tree-row tree-row-branches">
             <button class="tree-node node-small path-damage" data-upgrade="greaterDamage" data-tooltip="Raises attack by 3.">
               <strong>A</strong>

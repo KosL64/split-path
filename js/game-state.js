@@ -33,6 +33,13 @@ const playerState = {
   restorePower: 5,
   defense: 3,
   healAmount: 5,
+  criticalChance: config.criticalChance,
+  doubleAttack: false,
+  wither: false,
+  healOverTime: false,
+  lightSpellBonus: 0,
+  soulSpellBonus: 0,
+  soulSpellStunBonus: 0,
   lifeSteal: 0,
   thorns: false,
   strongDefend: false,
@@ -47,7 +54,16 @@ const playerState = {
     greaterDamage: 0,
     magic: 0,
     greaterDefense: 0,
-    thorns: 0
+    thorns: 0,
+    critRate: 0,
+    doubleAttack: 0,
+    lightSpell2: 0,
+    soulSpell2: 0,
+    wither: 0,
+    higherHealth: 0,
+    strengthen: 0,
+    healOverTime: 0,
+    dodge: 0
   }
 };
 
