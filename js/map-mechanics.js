@@ -683,6 +683,7 @@ function updateCamera() {
 }
 
 function updateInteractionPrompt() {
+  if (currentScreen !== "game") return;
   if (performance.now() < dialogueUntil) return;
   if (promptMode === "boss-dialogue") return;
   activeNode = null;

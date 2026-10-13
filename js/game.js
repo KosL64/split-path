@@ -180,6 +180,7 @@ function playBattleEffect(name) {
 }
 
 function enemyTurn() {
+  if (currentScreen !== "battle" || !activeEnemy || activeEnemy.restored) return;
   if (enemyStunTurns > 0) {
     enemyStunTurns -= 1;
     battleDefending = false;
@@ -298,6 +299,7 @@ function soulSpellAction() {
 }
 
 function performPlayerAttack(action) {
+  if (currentScreen !== "battle" || !activeEnemy || activeEnemy.restored || battleBusy) return;
   setBattleButtons(true); playBattleEffect("attack-effect");
   const baseAttack = action.fixedDamage ?? Math.round(action.attackPower * (1 + battleAttackBoost));
   const critical = action.fixedDamage === undefined && rollCriticalHit();
@@ -305,22 +307,20 @@ function performPlayerAttack(action) {
   const doubleStrike = action.canDouble && playerState.doubleAttack && Math.random() < 0.15;
   const hitCount = doubleStrike ? 2 : 1;
   const power = oneStrike * hitCount;
-  activeEnemy.control = Math.max(0, activeEnemy.control - power);
-  document.querySelector("#battle-message").textContent = `${critical ? "Critical hit! " : ""}${action.verb} reduces Control by ${power}.${doubleStrike ? " Double attack!" : ""}`;
+  document.querySelector("#battle-message").textContent = "Your attack is ready.";
   if (action.stunTurns) document.querySelector("#battle-message").textContent += ` Stunned for ${action.stunTurns} turns.`;
   updateBattleStats();
-  pendingAttack = { power, extraHeal: action.extraHeal, hitCount, deadline: performance.now() + 1000 };
+  const startedAt = performance.now();
+  pendingAttack = { enemy: activeEnemy, power, extraHeal: action.extraHeal, hitCount, critical, doubleStrike, verb: action.verb, startedAt, deadline: startedAt + attackTimingDuration };
   const timing = document.querySelector("#attack-timing"); timing.classList.remove("timing-open"); void timing.offsetWidth; timing.classList.add("timing-open");
-  document.querySelector("#attack-boost").disabled = false; attackTimingTimer = window.setTimeout(resolvePlayerAttack, 1000);
+  document.querySelector("#attack-boost").disabled = false; attackTimingTimer = window.setTimeout(resolvePlayerAttack, attackTimingDuration);
 }
 function boostPlayerAttack() {
   if (currentScreen !== "battle" || !pendingAttack || performance.now() >= pendingAttack.deadline) return;
-  const boostedPower = Math.round(pendingAttack.power * 1.2);
-  activeEnemy.control = Math.max(0, activeEnemy.control - (boostedPower - pendingAttack.power));
-  pendingAttack.power = boostedPower;
-  document.querySelector("#battle-message").textContent = `Boosted! Your attack reduces Control by ${boostedPower}.`;
-  updateBattleStats();
-  resolvePlayerAttack();
+  const position = clamp((performance.now() - pendingAttack.startedAt) / attackTimingDuration, 0, 1);
+  const distanceFromCenter = Math.abs(position - 0.5);
+  const bonus = distanceFromCenter <= 0.025 ? 0.25 : distanceFromCenter <= 0.12 ? 0.2 : 0;
+  resolvePlayerAttack(bonus);
 }
 
 function clearAttackTiming() {
@@ -331,10 +331,15 @@ function clearAttackTiming() {
   document.querySelector("#attack-boost").disabled = true;
 }
 
-function resolvePlayerAttack() {
+function resolvePlayerAttack(bonus = 0) {
   if (!pendingAttack) return;
-  const { power, extraHeal, hitCount } = pendingAttack;
+  const { enemy, power: basePower, extraHeal, hitCount, critical, doubleStrike, verb } = pendingAttack;
   clearAttackTiming();
+  if (currentScreen !== "battle" || enemy !== activeEnemy || enemy.restored) return;
+  const power = Math.round(basePower * (1 + bonus));
+  enemy.control = Math.max(0, enemy.control - power);
+  const timingText = bonus === 0.25 ? "Perfect! +25%. " : bonus === 0.2 ? "Center hit! +20%. " : "";
+  document.querySelector("#battle-message").textContent = `${timingText}${critical ? "Critical hit! " : ""}${verb} reduces Control by ${power}.${doubleStrike ? " Double attack!" : ""}`;
   const lifeStealHeal = playerState.lifeSteal ? Math.max(1, Math.round(power / 2)) : 0;
   const totalHeal = lifeStealHeal + extraHeal;
   if (totalHeal) { playerState.health = Math.min(playerState.maxHealth, playerState.health + totalHeal); document.querySelector("#battle-message").textContent += ` You restore ${totalHeal} health.`; }
@@ -386,6 +391,8 @@ function strengthenAction(stat) {
   updateBattleStats(); queueEnemyTurn();
 }
 function finishRestoration() {
+  if (!activeEnemy || activeEnemy.restored) return;
+  const restoredEnemy = activeEnemy;
   clearAttackTiming();
   window.clearTimeout(battleTimer);
   playerState.divinePoints += config.restoreReward;
@@ -394,12 +401,15 @@ function finishRestoration() {
   document.querySelector("#battle-message").textContent = `RESTORED! You earned ${config.restoreReward} Divine Points.`;
   updateHud();
 
-  window.setTimeout(() => {
+  window.clearTimeout(restorationTimer);
+  restorationTimer = window.setTimeout(() => {
+    restorationTimer = null;
+    if (currentScreen !== "battle" || activeEnemy !== restoredEnemy) return;
     contactLockedUntil = performance.now() + config.contactCooldown;
     setBattleButtons(false);
     showScreen("upgrades");
     updateUpgradeButtons();
-    document.querySelector("#upgrade-message").textContent = activeEnemy.kind === "boss"
+    document.querySelector("#upgrade-message").textContent = restoredEnemy.kind === "boss"
       ? "Kyle has been defeated. The Controlled Palace is free."
       : areaCleared
       ? `${area.name} is cleared. Every restored resident is safe in the village.`
@@ -453,6 +463,8 @@ function updateUpgradeButtons() {
   updateHud();
 }
 function resetGame() {
+  window.clearTimeout(restorationTimer);
+  restorationTimer = null;
   clearAttackTiming();
   window.clearTimeout(battleTimer);
   soulSpellUsed = false;
@@ -504,6 +516,10 @@ function gameLoop(time) {
     moveEnemies();
     updateCamera();
     checkAreaEncounters();
+    if (currentScreen !== "game") {
+      animationFrameId = requestAnimationFrame(gameLoop);
+      return;
+    }
     drawWorld();
     updateInteractionPrompt();
   }

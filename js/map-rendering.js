@@ -110,7 +110,8 @@ function drawAreaMap() {
     }
   }
 
-  if (area.garageHome) drawVillageGarageHouse(area.garageHome.x * config.tileSize - cameraX, area.garageHome.y * config.tileSize - cameraY, palette);`r`n  drawAreaRocks(area, cameraX, cameraY);
+  if (area.garageHome) drawVillageGarageHouse(area.garageHome.x * config.tileSize - cameraX, area.garageHome.y * config.tileSize - cameraY, palette);
+  drawAreaRocks(area, cameraX, cameraY);
   if (currentAreaId === "pristineCastle") drawCastleWallDecorations(cameraX, cameraY);
   area.enemies.filter((enemy) => !enemy.relocated).forEach((enemy) => drawEnemy(enemy, cameraX, cameraY));
   drawVillageResidents(cameraX, cameraY);
