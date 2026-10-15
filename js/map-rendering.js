@@ -112,7 +112,10 @@ function drawAreaMap() {
 
   if (area.garageHome) drawVillageGarageHouse(area.garageHome.x * config.tileSize - cameraX, area.garageHome.y * config.tileSize - cameraY, palette);
   drawAreaRocks(area, cameraX, cameraY);
-  if (currentAreaId === "pristineCastle") drawCastleWallDecorations(cameraX, cameraY);
+  if (currentAreaId === "pristineCastle") {
+    drawCastleThrone((area.throne.x + 1) * config.tileSize - cameraX, (area.throne.y + 1) * config.tileSize - cameraY);
+    drawCastleWallDecorations(cameraX, cameraY);
+  }
   area.enemies.filter((enemy) => !enemy.relocated).forEach((enemy) => drawEnemy(enemy, cameraX, cameraY));
   drawVillageResidents(cameraX, cameraY);
   const subtitle = currentAreaId === "pristineCastle"
@@ -306,7 +309,6 @@ function drawTile(tile, x, y, healed, areaId) {
     ctx.stroke();
   }
 
-  if (tile === "H") drawCastleThrone(x, y);
   if (tile === "V") drawFallenKingStatue(x, y);
   if (tile === "D") drawDustyDagger(x, y);
 
@@ -347,9 +349,9 @@ function drawCastleThrone(x, y) {
   ctx.fillRect(left + 114, top + 2, 18, 136);
   ctx.strokeStyle = "#29232c"; ctx.lineWidth = 5; ctx.strokeRect(left + 8, top + 8, 128, 132);
   if (!playerState.hasStaff) {
-    ctx.strokeStyle = "#f2d93d"; ctx.lineWidth = 6; ctx.beginPath();
-    ctx.moveTo(left + 101, top + 26); ctx.lineTo(left + 70, top + 103);
-    ctx.moveTo(left + 95, top + 22); ctx.lineTo(left + 110, top + 11); ctx.lineTo(left + 113, top + 29); ctx.stroke();
+    ctx.strokeStyle = "#f2d93d"; ctx.lineWidth = 4; ctx.beginPath();
+    ctx.moveTo(left + 92, top + 58); ctx.lineTo(left + 80, top + 98);
+    ctx.moveTo(left + 88, top + 59); ctx.lineTo(left + 96, top + 54); ctx.lineTo(left + 97, top + 63); ctx.stroke();
   }
 }
 function drawFallenKingStatue(x, y) {

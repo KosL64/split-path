@@ -57,9 +57,11 @@ function makePristineCastle() {
   const height = 16;
   const grid = Array.from({ length: height }, (_, row) => Array.from({ length: width }, (_, col) =>
     row === 0 || row === height - 1 || col === 0 || col === width - 1 ? "^" : "."));
+  const throne = { x: 11, y: 1, width: 3, height: 3 };
+  for (let row = throne.y; row < throne.y + throne.height; row += 1) {
+    for (let col = throne.x; col < throne.x + throne.width; col += 1) grid[row][col] = "K";
+  }
   grid[2][12] = "H";
-  [[11, 1], [12, 1], [13, 1], [11, 2], [13, 2], [11, 3], [12, 3], [13, 3]].forEach(([x, y]) => { grid[y][x] = "K"; });
-  [[11, 1], [12, 1], [13, 1], [11, 2], [13, 2], [11, 3], [12, 3], [13, 3]].forEach(([x, y]) => { grid[y][x] = "K"; });
   grid[4][8] = "V";
   grid[4][16] = "V";
   grid[6][17] = "D";
@@ -68,6 +70,7 @@ function makePristineCastle() {
   grid[height - 2][12] = "E";
   return {
     name: "Pristine Castle",
+    throne,
     width,
     height,
     start: { x: 12, y: 8 },

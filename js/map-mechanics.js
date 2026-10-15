@@ -708,7 +708,7 @@ function updateInteractionPrompt() {
       activeCastleFeature = castleFeature;
       promptMode = `castle-${castleFeature}`;
       const prompts = {
-        throne: playerState.hasStaff ? "Press Z to sit on the throne" : "Press Z to reclaim your staff",
+        throne: castleState.sitting ? "Press Z to stand up" : playerState.hasStaff ? "Press Z to sit on the throne" : "Press Z to reclaim your staff",
         rocks: playerState.hasStaff ? "Press Z to shatter the fallen rocks" : "You need your staff to clear these rocks",
         cloaks: "Press Z to inspect the old cloaks",
         dagger: "Press Z to inspect the dusty dagger"
@@ -892,7 +892,13 @@ function nearbyCastleFeature() {
   const playerRow = Math.floor((player.y + player.height / 2) / config.tileSize);
   const near = (x, y, radius = 1) => Math.abs(x - playerCol) <= radius && Math.abs(y - playerRow) <= radius;
 
-  if (near(12, 2)) return "throne";
+  const throne = areas.pristineCastle.throne;
+  const throneLeft = throne.x * config.tileSize;
+  const throneRight = (throne.x + throne.width) * config.tileSize;
+  const throneFront = (throne.y + throne.height) * config.tileSize;
+  const atThroneFront = player.x + player.width > throneLeft && player.x < throneRight
+    && player.y >= throneFront && player.y - throneFront <= config.tileSize * 0.75;
+  if (castleState.sitting || atThroneFront) return "throne";
   if (!castleState.exitCleared && ([11, 12, 13].some((x) => near(x, 13)))) return "rocks";
   if ([[19, 2], [20, 2], [21, 2]].some(([x, y]) => near(x, y))) return "cloaks";
   if (playerCol === 17 && playerRow === 6) return "dagger";
@@ -931,8 +937,10 @@ function sitOnThrone() {
   castleState.standY = player.y;
   castleState.sitting = true;
   castleState.sittingStartedAt = performance.now();
-  player.x = 12 * config.tileSize + 2;
-  player.y = 2 * config.tileSize - 4;
+  const throne = areas.pristineCastle.throne;
+  player.x = (throne.x + throne.width / 2) * config.tileSize - player.width / 2;
+  player.y = throne.y * config.tileSize + 112 - player.height - 6;
+  player.facing = 1;
   player.view = "front";
   showTemporaryPrompt("The throne remembers its King.", 1800);
 }

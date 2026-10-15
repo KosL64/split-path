@@ -154,6 +154,63 @@ async function inspect(page, url) {
   return { initial, images, checks };
 }
 
+async function verifyCastleRoute(page, label) {
+  await page.evaluate(() => {
+    cancelAnimationFrame(animationFrameId);
+    resetGame();
+    showScreen('game');
+  });
+  const walk = async (key, frames) => page.evaluate(({ key, frames }) => {
+    keys.clear();
+    keys.add(key);
+    for (let frame = 0; frame < frames; frame += 1) movePlayer();
+    keys.clear();
+    dialogueUntil = performance.now();
+    updateCamera();
+    updateInteractionPrompt();
+    drawWorld();
+    if (collidesWithBlockedTile(player)) throw new Error('Walking entered a solid object');
+  }, { key, frames });
+
+  await walk('arrowdown', 200);
+  await page.keyboard.press('z');
+  assert.equal(await page.evaluate(() => castleState.exitCleared), false, `${label}: rubble needs the staff`);
+  await walk('arrowup', 200);
+  assert.equal(await page.evaluate(() => promptMode), 'castle-throne', `${label}: staff prompt is reachable from spawn`);
+  await page.evaluate(() => {
+    const throne = areas.pristineCastle.throne;
+    const pixel = ctx.getImageData((throne.x * config.tileSize + 120) - areas.pristineCastle.cameraX,
+      (throne.y * config.tileSize + 85) - areas.pristineCastle.cameraY, 1, 1).data;
+    if (pixel[0] !== 197 || pixel[1] !== 156 || pixel[2] !== 66) throw new Error('Floor overwrote the throne arm');
+  });
+  const screenshot = path.join(os.tmpdir(), `split-path-castle-${label}.png`);
+  await page.locator('#game-canvas').screenshot({ path: screenshot });
+  console.log(`Castle screenshot: ${screenshot}`);
+  await page.keyboard.press('z');
+  assert.equal(await page.evaluate(() => playerState.hasStaff), true, `${label}: Z collects the staff`);
+  await walk('arrowup', 1);
+  await page.keyboard.press('z');
+  assert.equal(await page.evaluate(() => castleState.sitting), true, `${label}: Z seats the King`);
+  await page.evaluate(() => { dialogueUntil = performance.now(); updateInteractionPrompt(); });
+  await page.keyboard.press('z');
+  assert.equal(await page.evaluate(() => castleState.sitting || collidesWithBlockedTile(player)), false, `${label}: Z stands on clear ground`);
+  await page.evaluate(() => { dialogueUntil = performance.now(); updateInteractionPrompt(); });
+  await page.keyboard.press('z');
+  await walk('arrowdown', 1);
+  assert.equal(await page.evaluate(() => castleState.sitting), false, `${label}: movement also leaves the throne`);
+  await walk('arrowdown', 200);
+  assert.equal(await page.evaluate(() => promptMode), 'castle-rocks', `${label}: rubble is reachable`);
+  await page.keyboard.press('z');
+  assert.equal(await page.evaluate(() => castleState.exitCleared), true, `${label}: Z clears the rocks`);
+  await walk('arrowdown', 200);
+  assert.equal(await page.evaluate(() => promptMode), 'leave-area', `${label}: doorway is reachable`);
+  await page.keyboard.press('z');
+  assert.equal(await page.evaluate(() => gameMode), 'kingdom', `${label}: Z exits to the Kingdom Map`);
+  await page.evaluate(() => resetGame());
+  assert.equal(await page.evaluate(() => playerState.hasStaff || castleState.exitCleared), false, `${label}: reset restores castle progression`);
+  console.log(`${label}: movement, staff pickup, throne sitting/standing, rubble, exit and reset pass.`);
+}
+
 (async () => {
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
@@ -212,6 +269,7 @@ async function inspect(page, url) {
     await desktop.evaluate(() => { contactLockedUntil = 0; checkAreaEncounters(); });
     assert.equal(await desktop.evaluate(() => currentScreen), 'game', 'Restored level 8 enemy cannot restart its encounter');
     console.log('Level 8 encounter, keyboard perfect strike, single restoration reward, and Return recovery pass.');
+    await verifyCastleRoute(desktop, 'desktop');
     if (baseline) {
       const previous = await inspect(await browser.newPage({ viewport: { width: 1280, height: 900 } }), origin + '/baseline/index.html');
       assert.deepEqual(current.initial, previous.initial, 'Initial map and enemy data must match baseline');
@@ -229,6 +287,7 @@ async function inspect(page, url) {
     assert.equal(await local.evaluate(() => currentAreaId), 'pristineCastle');
     assert.deepEqual(localErrors, []);
     console.log('Direct local-file play and mobile startup pass with no runtime errors.');
+    await verifyCastleRoute(local, 'mobile-local');
   } finally {
     if (browser) await browser.close();
     await new Promise(resolve => server.close(resolve));
