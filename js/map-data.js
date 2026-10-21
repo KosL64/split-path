@@ -18,6 +18,12 @@ const soulLevelRanges = {
   controlledPlains: { min: 70, max: 100 }
 };
 
+const regionalBossDefinitions = {
+  sylvan: { name: "Sylvan Guardian", level: 20, health: 100, attack: 8, defense: 6, cubes: 3, souls: 0, palaceX: 8 },
+  azureApex: { name: "Azure Guardian", level: 50, health: 160, attack: 11, defense: 8, cubes: 5, souls: 1, palaceX: 15 },
+  controlledPlains: { name: "Plains Guardian", level: 100, health: 240, attack: 14, defense: 10, cubes: 6, souls: 0, palaceX: 22 }
+};
+
 const kingdomMap = {
   width: 1680,
   height: 1080,
@@ -48,9 +54,25 @@ const areas = {
   azureApex: makeAzureApexArea(),
   azureVillage: makeVillageArea("Azure Village", "azureVillage", 31),
   sylvanVillage: makeVillageArea("Sylvan Village", "sylvanVillage", 20),
-  controlledPalace: makePreviewArea("Controlled Palace", false),
+  controlledPalace: makePalaceFloor(false),
+  palaceUpper: makePalaceFloor(true),
   controlledPlains: makeControlledPlainsArea()
 };
+
+function makePalaceFloor(upper) {
+  const width = 30;
+  const height = 20;
+  const grid = createAreaGrid(width, height, "^", "^");
+  grid[16][15] = upper ? ">" : "E";
+  if (!upper) grid[4][15] = "<";
+  return {
+    name: upper ? "Controlled Palace - Kyle's Chamber" : "Controlled Palace - First Floor",
+    width, height, start: { x: 15, y: upper ? 15 : 16 },
+    cameraX: 0, cameraY: 0, healed: false, enemies: [], kingdomAreaId: "controlledPalace",
+    stairs: { x: 15, y: upper ? 16 : 4, target: upper ? "controlledPalace" : "palaceUpper", arrival: { x: 15, y: upper ? 5 : 15 } },
+    map: finishAreaGrid(grid)
+  };
+}
 
 function makePristineCastle() {
   const width = 24;

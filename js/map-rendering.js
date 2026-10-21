@@ -116,7 +116,7 @@ function drawAreaMap() {
     drawCastleThrone((area.throne.x + 1) * config.tileSize - cameraX, (area.throne.y + 1) * config.tileSize - cameraY);
     drawCastleWallDecorations(cameraX, cameraY);
   }
-  area.enemies.filter((enemy) => !enemy.relocated).forEach((enemy) => drawEnemy(enemy, cameraX, cameraY));
+  visibleAreaEnemies().forEach((enemy) => drawEnemy(enemy, cameraX, cameraY));
   drawVillageResidents(cameraX, cameraY);
   const subtitle = currentAreaId === "pristineCastle"
     ? playerState.hasStaff
@@ -329,6 +329,17 @@ function drawTile(tile, x, y, healed, areaId) {
     ctx.strokeStyle = "#f2c95f";
     ctx.lineWidth = 4;
     ctx.strokeRect(x + 9, y + 9, size - 18, size - 18);
+  }
+
+  if (tile === "<" || tile === ">") {
+    ctx.fillStyle = "#c4c0ba";
+    ctx.fillRect(x + 6, y + 5, size - 12, size - 10);
+    ctx.strokeStyle = "#47424f";
+    ctx.lineWidth = 3;
+    for (let step = 0; step < 4; step += 1) {
+      const inset = tile === "<" ? 6 + step * 3 : 15 - step * 3;
+      ctx.strokeRect(x + inset, y + 9 + step * 7, size - inset * 2, 6);
+    }
   }
 
   ctx.strokeStyle = "rgba(243,238,225,.05)";
@@ -641,17 +652,20 @@ function drawEnemy(enemy, cameraX, cameraY) {
   const x = enemy.x - cameraX;
   const y = enemy.y - cameraY;
 
-  if (enemy.kind === "boss" && kyleSprite.complete && kyleSprite.naturalWidth > 0) {
+  const bossSprite = enemy.regionBoss ? regionalBossSprites[enemy.regionBoss] : kyleSprite;
+  if (enemy.kind === "boss" && bossSprite.complete && bossSprite.naturalWidth > 0) {
     ctx.save();
     ctx.fillStyle = "rgba(0,0,0,.32)";
     ctx.beginPath();
     ctx.ellipse(x + enemy.width / 2, y + enemy.height - 1, 28, 8, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.drawImage(kyleSprite, x - 18, y - 55, 82, 108);
+    const height = 108;
+    const width = height * bossSprite.naturalWidth / bossSprite.naturalHeight;
+    ctx.drawImage(bossSprite, x + enemy.width / 2 - width / 2, y + enemy.height - height, width, height);
     ctx.restore();
     ctx.font = "900 13px Trebuchet MS";
     ctx.fillStyle = "#f2c95f";
-    ctx.fillText("Kyle | Lv 100", x - 20, y - 65);
+    ctx.fillText(`${enemy.name} | Lv ${enemy.level}`, x - 32, y - 65);
     return;
   }
 
@@ -722,8 +736,12 @@ function drawEnemy(enemy, cameraX, cameraY) {
 
 function drawRestoredCube(enemy, x, y) {
   ctx.save();
-  ctx.shadowColor = "rgba(242,201,95,.8)";
-  ctx.shadowBlur = 18;
+  ctx.fillStyle = "rgba(0,0,0,.28)";
+  ctx.beginPath();
+  ctx.ellipse(x + enemy.width / 2, y + enemy.height + 1, enemy.width / 2, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  ctx.save();
   ctx.fillStyle = "#f1ead8";
   roundRect(x, y, enemy.width, enemy.height, 9);
   ctx.fill();

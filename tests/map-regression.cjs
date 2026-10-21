@@ -65,7 +65,7 @@ async function inspect(page, url) {
     check(player.x === before + 1, 'Player movement still works');
     check(areas.sylvan.enemies.length === 20 && areas.azureApex.enemies.length === 31 && areas.controlledPlains.enemies.length === 55, 'Enemy counts are preserved');
     check(areas.sylvanVillage.homeSlots.length === 21 && areas.azureVillage.homeSlots.length === 32, 'Village homes include the additional garage house');
-    check(areas.controlledPalace.enemies[0].controlMax === 1000, 'Kyle retains 1000 health');
+    check(areas.palaceUpper.enemies[0].controlMax === 1000, 'Kyle retains 1000 health upstairs');
     const resident = areas.sylvan.enemies.find(enemy => enemy.visual === 'ground');
     activeEnemy = resident;
     finishRestoration();
@@ -211,6 +211,197 @@ async function verifyCastleRoute(page, label) {
   console.log(`${label}: movement, staff pickup, throne sitting/standing, rubble, exit and reset pass.`);
 }
 
+async function verifyGuardianProgression(page) {
+  await page.waitForFunction(() => Object.values(regionalBossSprites).every(image => image.complete && image.naturalWidth > 0));
+  const results = await page.evaluate(() => {
+    const passed = [];
+    const check = (value, label) => { if (!value) throw new Error(label); passed.push(label); };
+    resetGame();
+    showScreen('game');
+    playerState.hasStaff = true;
+    enterArea('controlledPalace');
+    check(visibleAreaEnemies().length === 3, 'Palace first floor starts with three guardians');
+    player.x = 15 * config.tileSize;
+    player.y = 4 * config.tileSize;
+    updateInteractionPrompt();
+    check(promptMode === 'palace-stairs', 'Upstairs prompt is reachable');
+    usePrompt();
+    check(currentAreaId === 'palaceUpper' && !collidesWithBlockedTile(player), 'Stairs arrive safely in Kyle chamber');
+    player.y = 16 * config.tileSize;
+    updateInteractionPrompt();
+    usePrompt();
+    check(currentAreaId === 'controlledPalace' && !collidesWithBlockedTile(player), 'Downstairs returns to the lower staircase');
+    enterArea('palaceUpper');
+    leaveArea();
+    const palaceNode = kingdomMap.nodes.find(node => node.areaId === 'controlledPalace');
+    check(player.x === palaceNode.x - player.width / 2, 'Upper floor exits to the palace Kingdom Map node');
+
+    enterArea('sylvan');
+    let enemy = ordinaryEnemies(areas.sylvan).find(candidate => candidate.visual === 'flying');
+    startBattle(enemy);
+    finishRestoration();
+    finishRestoration();
+    check(playerState.divinePoints === 10, 'Soul awards 10 points exactly once');
+    resetGame();
+    showScreen('game');
+    playerState.hasStaff = true;
+    enterArea('sylvan');
+    enemy = ordinaryEnemies(areas.sylvan)[0];
+    startBattle(enemy);
+    finishRestoration();
+    check(playerState.divinePoints === 5, 'Cube retains its 5-point reward');
+    resetGame();
+    showScreen('game');
+    playerState.hasStaff = true;
+    enterArea('sylvan');
+    enemy = ordinaryEnemies(areas.sylvan)[0];
+    startBattle(enemy);
+    playerState.wither = true;
+    enemy.control = enemy.controlMax = 200;
+    applyAttackMilestones(4);
+    check(enemy.control === 200, 'Wither waits for five hits');
+    applyAttackMilestones(1);
+    check(enemy.control === 170, 'Wither removes 15 percent from ordinary enemies');
+    window.clearTimeout(battleTimer);
+    setBattleButtons(false);
+    startBattle(areas.controlledPalace.enemies[0]);
+    activeEnemy.control = activeEnemy.controlMax = 200;
+    applyAttackMilestones(5);
+    check(activeEnemy.control === 190, 'Wither removes 5 percent from guardians');
+    startBattle(areas.palaceUpper.enemies[0]);
+    applyAttackMilestones(5);
+    check(activeEnemy.control === 950, 'Wither retains 5 percent damage against Kyle');
+
+    resetGame();
+    showScreen('game');
+    for (const region of Object.keys(regionalBossDefinitions)) {
+      const area = areas[region];
+      check(!area.enemies.some(candidate => candidate.regionBoss), `${region}: guardian starts hidden at home`);
+      const ordinary = ordinaryEnemies(area);
+      ordinary.slice(0, -1).forEach(candidate => { candidate.restored = true; });
+      restoreMapEnemy(ordinary.at(-1), region);
+      const boss = area.enemies.find(candidate => candidate.regionBoss === region);
+      check(boss && !boss.restored, `${region}: clearing ordinary enemies reveals its guardian`);
+      enterArea(region);
+      check(!collidesWithBlockedTile(boss), `${region}: guardian spawns on clear ground`);
+      player.x = boss.x;
+      player.y = boss.y;
+      updateInteractionPrompt();
+      check(promptMode === 'challenge-boss', `${region}: guardian uses contact and Z`);
+      playerState.hasStaff = true;
+      if (region === 'azureApex') {
+        enterArea('controlledPalace');
+        startBattle(regionalBossStates[region].palaceEnemy);
+      } else usePrompt();
+      check(currentScreen === 'battle' && activeEnemy.regionBoss === region, `${region}: guardian battle opens`);
+      const points = playerState.divinePoints;
+      finishRestoration();
+      finishRestoration();
+      const restored = area.enemies.filter(candidate => candidate.permanentResident);
+      const definition = regionalBossDefinitions[region];
+      check(restored.filter(candidate => candidate.visual === 'ground').length === definition.cubes
+        && restored.filter(candidate => candidate.visual === 'flying').length === definition.souls, `${region}: exact released cube and soul counts`);
+      check(playerState.divinePoints === points + 5, `${region}: guardian reward occurs once`);
+      check(!visibleAreaEnemies('controlledPalace').some(candidate => candidate.regionBoss === region)
+        && !visibleAreaEnemies(region).some(candidate => candidate.regionBoss === region), `${region}: defeat removes both appearances`);
+      const count = restored.length;
+      defeatRegionalBoss(region);
+      revealRegionalBosses();
+      check(area.enemies.filter(candidate => candidate.permanentResident).length === count, `${region}: released residents cannot duplicate`);
+      window.clearTimeout(restorationTimer);
+      restorationTimer = null;
+      setBattleButtons(false);
+      showScreen('game');
+      enterArea(region);
+      restored.forEach(candidate => {
+        check(!collidesWithBlockedTile(candidate), `${region}: released resident has a safe spawn`);
+        candidate.moveX = 1; candidate.moveY = 0; candidate.waitUntil = 0;
+        candidate.movingUntil = performance.now() + 1000;
+        const x = candidate.x;
+        moveEnemies();
+        check(candidate.x > x, `${region}: released ${candidate.visual} can wander`);
+      });
+      leaveArea();
+      enterArea(region);
+      check(restored.every(candidate => !candidate.relocated), `${region}: boss residents stay in their region after travel`);
+      const village = villageAreaForSource(region);
+      if (village) check(villageResidents(village).every(candidate => !candidate.permanentResident), `${region}: boss residents never use village slots`);
+    }
+    resetGame();
+    check(Object.values(regionalBossStates).every(state => !state.defeated && !state.revealed)
+      && Object.values(areas).every(area => area.enemies.every(candidate => !candidate.permanentResident))
+      && visibleAreaEnemies('controlledPalace').length === 3, 'Reset restores all guardians and removes released residents');
+    restoreMapEnemy(regionalBossStates.sylvan.palaceEnemy, 'controlledPalace');
+    ordinaryEnemies(areas.sylvan).forEach(candidate => { candidate.restored = true; });
+    revealRegionalBosses();
+    check(!areas.sylvan.enemies.some(candidate => candidate.regionBoss)
+      && areas.sylvan.enemies.filter(candidate => candidate.permanentResident).length === 3,
+      'Defeating a palace guardian before clearing its region prevents a later duplicate');
+    resetGame();
+    playerState.divinePoints = 1000;
+    ['health', 'greaterHealth', 'higherHealth', 'damage', 'greaterDamage', 'defense', 'greaterDefense'].forEach(buyUpgrade);
+    check(playerState.maxHealth === 48 && playerState.restorePower === 13 && playerState.defense === 11,
+      'Purchased health, damage and defense branches apply their advertised stat increases');
+    playerState.hasStaff = true;
+    enterArea('azureApex');
+    const highEnemy = ordinaryEnemies(areas.azureApex).find(candidate => candidate.level === 50);
+    startBattle(highEnemy);
+    enemyTurn();
+    check(playerState.health === 6, 'Balance audit: level 50 deals 42 damage against upgraded Guard 11');
+    resetGame();
+    return passed;
+  });
+  console.log(results.join('\n'));
+}
+
+async function verifyBossVisuals(page, label, inspectAlpha = false) {
+  await page.waitForFunction(() => Object.values(regionalBossSprites).every(image => image.complete && image.naturalWidth > 0));
+  await page.evaluate(() => {
+    cancelAnimationFrame(animationFrameId);
+    resetGame();
+    playerState.hasStaff = true;
+    showScreen('game');
+    enterArea('controlledPalace');
+    player.y = 10 * config.tileSize;
+    updateCamera();
+    drawWorld();
+  });
+  await page.locator('#game-canvas').screenshot({ path: path.join(os.tmpdir(), `split-path-palace-${label}.png`) });
+  for (const region of ['sylvan', 'azureApex', 'controlledPlains']) {
+    const image = await page.evaluate(({ region, inspectAlpha }) => {
+      if (inspectAlpha) {
+        const sprite = regionalBossSprites[region];
+        const canvas = document.createElement('canvas');
+        canvas.width = sprite.width;
+        canvas.height = sprite.height;
+        const context = canvas.getContext('2d');
+        context.drawImage(sprite, 0, 0);
+        const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+        let opaque = 0, transparent = 0;
+        for (let offset = 3; offset < pixels.length; offset += 4) {
+          if (pixels[offset] > 240) opaque += 1;
+          if (pixels[offset] === 0) transparent += 1;
+        }
+        if (!opaque || !transparent) throw new Error(`${region}: sprite needs visible art and transparency`);
+      }
+      startBattle(regionalBossStates[region].palaceEnemy);
+      return document.querySelector('#battle-enemy').style.backgroundImage;
+    }, { region, inspectAlpha });
+    assert.ok(image.includes('transparent.png'), `${region}: battle uses the prepared art`);
+    await page.locator('#battle-screen .battle-panel').screenshot({ path: path.join(os.tmpdir(), `split-path-${region}-battle-${label}.png`) });
+    await page.evaluate(() => { showScreen('game'); setBattleButtons(false); });
+  }
+  await page.evaluate(() => {
+    enterArea('palaceUpper');
+    player.y = 10 * config.tileSize;
+    updateCamera();
+    drawWorld();
+  });
+  await page.locator('#game-canvas').screenshot({ path: path.join(os.tmpdir(), `split-path-kyle-floor-${label}.png`) });
+  await page.evaluate(() => resetGame());
+  console.log(`${label}: palace floors and all boss battle artwork render; screenshots saved to the temp folder.`);
+}
+
 (async () => {
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
@@ -270,6 +461,8 @@ async function verifyCastleRoute(page, label) {
     assert.equal(await desktop.evaluate(() => currentScreen), 'game', 'Restored level 8 enemy cannot restart its encounter');
     console.log('Level 8 encounter, keyboard perfect strike, single restoration reward, and Return recovery pass.');
     await verifyCastleRoute(desktop, 'desktop');
+    await verifyGuardianProgression(desktop);
+    await verifyBossVisuals(desktop, 'desktop', true);
     if (baseline) {
       const previous = await inspect(await browser.newPage({ viewport: { width: 1280, height: 900 } }), origin + '/baseline/index.html');
       assert.deepEqual(current.initial, previous.initial, 'Initial map and enemy data must match baseline');
@@ -288,6 +481,7 @@ async function verifyCastleRoute(page, label) {
     assert.deepEqual(localErrors, []);
     console.log('Direct local-file play and mobile startup pass with no runtime errors.');
     await verifyCastleRoute(local, 'mobile-local');
+    await verifyBossVisuals(local, 'mobile-local');
   } finally {
     if (browser) await browser.close();
     await new Promise(resolve => server.close(resolve));

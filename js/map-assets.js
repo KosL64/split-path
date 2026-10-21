@@ -31,6 +31,16 @@ const kyleSpritePath = "img/assets/enemy-kyle-boss/Kyle-transparent.png";
 const kyleSprite = new Image();
 kyleSprite.src = kyleSpritePath;
 
+const regionalBossSprites = Object.fromEntries(Object.entries({
+  sylvan: "img/assets/sylvan/boss-transparent.png",
+  azureApex: "img/assets/Azure Apex/boss-transparent.png",
+  controlledPlains: "img/assets/plains-boss-transparent.png"
+}).map(([id, path]) => {
+  const image = new Image();
+  image.src = path;
+  return [id, image];
+}));
+
 function readySylvanSprite(name, restored = false) {
   const sprite = restored ? restoredSylvanSprites[name] : sylvanSprites[name];
   return sprite?.complete && sprite.naturalWidth > 0 ? sprite : null;

@@ -464,6 +464,7 @@ meter {
   height: 24px;
   overflow: hidden;
   background: #34313b;
+  opacity: .65;
 }
 
 .attack-timing-track::before,

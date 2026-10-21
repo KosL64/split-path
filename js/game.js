@@ -98,7 +98,7 @@ function updateHud() {
 }
 
 function startBattle(enemy) {
-  if (enemy.restored || battleBusy) return;
+  if (bossDefeated(enemy) || battleBusy) return;
   clearAttackTiming();
   window.clearTimeout(battleTimer);
   soulSpellUsed = false;
@@ -116,12 +116,13 @@ function startBattle(enemy) {
   const battleEnemy = document.querySelector("#battle-enemy");
   battleEnemy.classList.remove("restored", "boss-cube");
   battleEnemy.style.backgroundImage = "";
-  if (enemy.kind === "boss" && kyleSprite.complete && kyleSprite.naturalWidth > 0) {
+  const bossSprite = enemy.regionBoss ? regionalBossSprites[enemy.regionBoss] : kyleSprite;
+  if (enemy.kind === "boss" && bossSprite.complete && bossSprite.naturalWidth > 0) {
     battleEnemy.classList.add("boss-cube");
-    battleEnemy.style.backgroundImage = `url('${kyleSpritePath}')`;
+    battleEnemy.style.backgroundImage = `url("${bossSprite.src}")`;
   }
   document.querySelector("#battle-message").textContent = enemy.kind === "boss"
-    ? "Kyle blocks the path. The final battle begins!"
+    ? `${enemy.name} blocks the path. ${enemy.regionBoss ? "The guardian battle begins!" : "The final battle begins!"}`
     : enemy.visual === "flying"
     ? `A lv ${enemy.level} controlled soul spotted you.`
     : `A level ${enemy.level} controlled cube lashes out. Purify it with your attacks.`;
@@ -348,7 +349,7 @@ function resolvePlayerAttack(bonus = 0) {
   queueEnemyTurn();
 }
 function applyAttackMilestones(hitCount) {
-  if (playerState.wither) { witherAttackCount += hitCount; while (witherAttackCount >= 5) { witherAttackCount -= 5; const witherRate = activeEnemy.kind === "boss" ? 0.05 : 0.10; const damage = Math.round(activeEnemy.controlMax * witherRate); activeEnemy.control = Math.max(0, activeEnemy.control - damage); document.querySelector("#battle-message").textContent += ` Wither removes ${damage} Control.`; } }
+  if (playerState.wither) { witherAttackCount += hitCount; while (witherAttackCount >= 5) { witherAttackCount -= 5; const witherRate = activeEnemy.kind === "boss" ? 0.05 : 0.15; const damage = Math.round(activeEnemy.controlMax * witherRate); activeEnemy.control = Math.max(0, activeEnemy.control - damage); document.querySelector("#battle-message").textContent += ` Wither removes ${damage} Control.`; } }
   if (playerState.healOverTime) { healOverTimeAttackCount += hitCount; while (healOverTimeAttackCount >= 10) { healOverTimeAttackCount -= 10; const heal = Math.round((playerState.maxHealth - playerState.health) * 0.2); if (heal > 0) { playerState.health = Math.min(playerState.maxHealth, playerState.health + heal); document.querySelector("#battle-message").textContent += ` Heal Over Time restores ${heal} health.`; } } }
 }
 function currentAttackPower() {
@@ -391,14 +392,15 @@ function strengthenAction(stat) {
   updateBattleStats(); queueEnemyTurn();
 }
 function finishRestoration() {
-  if (!activeEnemy || activeEnemy.restored) return;
+  if (!activeEnemy || bossDefeated(activeEnemy)) return;
   const restoredEnemy = activeEnemy;
   clearAttackTiming();
   window.clearTimeout(battleTimer);
-  playerState.divinePoints += config.restoreReward;
+  const reward = restoredEnemy.kind !== "boss" && restoredEnemy.visual === "flying" ? 10 : config.restoreReward;
+  playerState.divinePoints += reward;
   const { area, remainingEnemies, areaCleared } = restoreMapEnemy(activeEnemy, currentAreaId);
   document.querySelector("#battle-enemy").classList.add("restored");
-  document.querySelector("#battle-message").textContent = `RESTORED! You earned ${config.restoreReward} Divine Points.`;
+  document.querySelector("#battle-message").textContent = `RESTORED! You earned ${reward} Divine Points.`;
   updateHud();
 
   window.clearTimeout(restorationTimer);
@@ -409,10 +411,14 @@ function finishRestoration() {
     setBattleButtons(false);
     showScreen("upgrades");
     updateUpgradeButtons();
-    document.querySelector("#upgrade-message").textContent = restoredEnemy.kind === "boss"
+    document.querySelector("#upgrade-message").textContent = restoredEnemy.regionBoss
+      ? `${restoredEnemy.name} is free. Its restored inhabitants now roam ${areas[restoredEnemy.regionBoss].name}.`
+      : restoredEnemy.kind === "boss"
       ? "Kyle has been defeated. The Controlled Palace is free."
       : areaCleared
-      ? `${area.name} is cleared. Every restored resident is safe in the village.`
+      ? regionalBossStates[currentAreaId]?.defeated
+        ? `${area.name} is cleared. Its restored inhabitants are free.`
+        : `${area.name}: all ordinary enemies are restored. Its guardian has appeared.`
       : `${area.name}: ${remainingEnemies} controlled creatures remain.`;
   }, 900);
 }
@@ -440,7 +446,7 @@ function buyUpgrade(type) {
   if (type === "doubleAttack") { playerState.doubleAttack = true; document.querySelector("#upgrade-message").textContent = "Double Attack learned: 15% chance to strike twice."; }
   if (type === "lightSpell2") { playerState.lightSpellBonus = 3; document.querySelector("#upgrade-message").textContent = "Light Spell 2 learned: +3 damage."; }
   if (type === "soulSpell2") { playerState.soulSpellBonus = 1; playerState.soulSpellStunBonus = 1; document.querySelector("#upgrade-message").textContent = "Soul Spell 2 learned."; }
-  if (type === "wither") { playerState.wither = true; document.querySelector("#upgrade-message").textContent = "Wither learned: every 5 hits remove 5% maximum Control."; }
+  if (type === "wither") { playerState.wither = true; document.querySelector("#upgrade-message").textContent = "Wither learned: every 5 hits remove 15% maximum Control, or 5% against bosses."; }
   if (type === "higherHealth") { playerState.maxHealth += 10; playerState.health = playerState.maxHealth; document.querySelector("#upgrade-message").textContent = "Higher Health learned: +10 maximum health."; }
   if (type === "strengthen") { document.querySelector("#upgrade-message").textContent = "Strengthen learned. Heal now opens battle boosts."; }
   if (type === "healOverTime") { playerState.healOverTime = true; document.querySelector("#upgrade-message").textContent = "Heal Over Time learned."; }
