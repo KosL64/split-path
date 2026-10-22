@@ -176,7 +176,7 @@ function finishAreaGrid(grid) {
 
 function makeSylvanArea() {
   const width = 54;
-  const height = 26;
+  const height = 39;
   const grid = createAreaGrid(width, height, "^", "T");
 
   [
@@ -212,7 +212,7 @@ function makeSylvanArea() {
 
 function makeAzureApexArea() {
   const width = 54;
-  const height = 26;
+  const height = 39;
   const grid = createAreaGrid(width, height, "^", "R");
 
   [
