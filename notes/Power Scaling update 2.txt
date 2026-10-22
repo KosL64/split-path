@@ -1,0 +1,9 @@
+Power Scaling update 2
+
+1. I forgot if i mentioned this earlier, every upgrade also raises the stats. you did that for life steal (health upgrade and greater health don't count because they already raise health to begin with), but you didn't do that with wither, strengthen, or heal over time. they also should increase health by 3. 
+
+2. instead of 3, make greater damage increase attack by 5, and make magic increase damage by 4. You also forgot to upgrade damage for crit rate and double attack. both should increase damage by 3. 
+
+3. dodge should also increase defense by 3. 
+
+4. Add a puzzle in the Pristine Castle (really its just a cheat code you can put in, BUT i just wanna use it to test out added features in the future). if you interact with the dusty dagger 3 times and press h, make the king be able to insta-kill every enemy that he defends against (Cubes AND souls (and Kyle)). Eventually, this feature will be REMOVED!!!
