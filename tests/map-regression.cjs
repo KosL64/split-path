@@ -340,7 +340,7 @@ async function verifyGuardianProgression(page) {
     resetGame();
     playerState.divinePoints = 1000;
     ['health', 'greaterHealth', 'higherHealth', 'damage', 'greaterDamage', 'defense', 'greaterDefense'].forEach(buyUpgrade);
-    check(playerState.maxHealth === 48 && playerState.restorePower === 13 && playerState.defense === 11,
+    check(playerState.maxHealth === 48 && playerState.restorePower === 15 && playerState.defense === 11,
       'Purchased health, damage and defense branches apply their advertised stat increases');
     playerState.hasStaff = true;
     enterArea('azureApex');
@@ -400,6 +400,119 @@ async function verifyBossVisuals(page, label, inspectAlpha = false) {
   await page.locator('#game-canvas').screenshot({ path: path.join(os.tmpdir(), `split-path-kyle-floor-${label}.png`) });
   await page.evaluate(() => resetGame());
   console.log(`${label}: palace floors and all boss battle artwork render; screenshots saved to the temp folder.`);
+}
+
+async function verifyScalingAndDagger(page) {
+  const checks = await page.evaluate(() => {
+    const passed = [];
+    const check = (value, label) => { if (!value) throw new Error(label); passed.push(label); };
+    const prepare = () => { resetGame(); showScreen('game'); playerState.divinePoints = 1000; };
+    for (const ability of ['wither', 'strengthen', 'healOverTime']) {
+      prepare();
+      ['health', ability === 'wither' ? 'lifeSteal' : 'greaterHealth'].forEach(buyUpgrade);
+      playerState.health -= 7;
+      const before = { health: playerState.health, max: playerState.maxHealth, points: playerState.divinePoints };
+      buyUpgrade(ability);
+      check(playerState.maxHealth === before.max + 3 && playerState.health === before.health + 3
+        && playerState.divinePoints === before.points - 15, `${ability}: purchase grants exactly 3 current and maximum health`);
+      buyUpgrade(ability);
+      check(playerState.maxHealth === before.max + 3 && playerState.divinePoints === before.points - 15,
+        `${ability}: repeat purchase grants no extra stats and spends no points`);
+    }
+    for (const ability of ['critRate', 'doubleAttack']) {
+      prepare();
+      ['damage', 'greaterDamage'].forEach(buyUpgrade);
+      check(playerState.restorePower === 15, 'Greater Damage adds 5 attack');
+      buyUpgrade(ability);
+      check(playerState.restorePower === 18, `${ability}: adds 3 attack`);
+      check(ability === 'critRate' ? playerState.criticalChance === 0.3 : playerState.doubleAttack,
+        `${ability}: original ability is retained`);
+      const points = playerState.divinePoints;
+      buyUpgrade(ability);
+      buyUpgrade(ability === 'critRate' ? 'doubleAttack' : 'critRate');
+      check(playerState.restorePower === 18 && playerState.divinePoints === points,
+        `${ability}: repeat and conflicting purchases cannot add stats`);
+    }
+    prepare();
+    ['damage', 'magic'].forEach(buyUpgrade);
+    check(playerState.restorePower === 14 && playerState.magic, 'Magic adds 4 attack and retains spells');
+    prepare();
+    ['defense', 'greaterDefense', 'dodge'].forEach(buyUpgrade);
+    check(playerState.defense === 14 && playerState.upgrades.dodge, 'Dodge adds 3 defense and retains its passive');
+    prepare();
+    buyUpgrade('wither');
+    buyUpgrade('dodge');
+    check(playerState.maxHealth === 20 && playerState.defense === 3, 'Locked upgrades cannot grant stat bonuses');
+    ['health', 'greaterHealth', 'strengthen', 'healOverTime'].forEach(buyUpgrade);
+    const health = playerState.maxHealth;
+    buyUpgrade('higherHealth');
+    check(playerState.maxHealth === health && !playerState.upgrades.higherHealth,
+      'Health branch still permits only two tier-three choices');
+    resetGame();
+    showScreen('game');
+    playerState.hasStaff = true;
+    enterArea('sylvan');
+    const enemy = ordinaryEnemies(areas.sylvan)[0];
+    startBattle(enemy);
+    defendAction();
+    check(!enemy.restored && enemy.control === enemy.controlMax && !daggerTestMode.enabled,
+      'Defend retains normal behavior before the cheat is activated');
+    resetGame();
+    showScreen('game');
+    player.x = 17 * config.tileSize + 2;
+    player.y = 6 * config.tileSize - 8;
+    updateInteractionPrompt();
+    check(promptMode === 'castle-dagger', 'Standing over the dagger offers its inspection');
+    return passed;
+  });
+  console.log(checks.join('\n'));
+  await page.keyboard.press('h');
+  assert.equal(await page.evaluate(() => daggerTestMode.enabled), false, 'H alone cannot activate the cheat');
+  await page.keyboard.press('z');
+  await page.keyboard.down('z');
+  await page.keyboard.down('z');
+  await page.keyboard.up('z');
+  assert.equal(await page.evaluate(() => daggerTestMode.inspections), 2, 'Held Z cannot count as multiple dagger inspections');
+  await page.keyboard.press('h');
+  assert.equal(await page.evaluate(() => daggerTestMode.enabled), false, 'Two inspections are insufficient');
+  await page.keyboard.press('z');
+  await page.evaluate(() => enterArea('sylvan'));
+  await page.keyboard.press('h');
+  assert.equal(await page.evaluate(() => daggerTestMode.enabled), false, 'H only activates in Pristine Castle');
+  await page.evaluate(() => enterArea('pristineCastle'));
+  await page.keyboard.press('h');
+  assert.equal(await page.evaluate(() => daggerTestMode.enabled), true, 'Three inspections and H activate test mode');
+  for (const target of ['cube', 'soul', 'sylvan', 'azureApex', 'controlledPlains', 'kyle']) {
+    const before = await page.evaluate(target => {
+      playerState.hasStaff = true;
+      let enemy;
+      if (target === 'kyle') { enterArea('palaceUpper'); enemy = areas.palaceUpper.enemies[0]; }
+      else if (regionalBossStates[target]) { enterArea('controlledPalace'); enemy = regionalBossStates[target].palaceEnemy; }
+      else {
+        enterArea('sylvan');
+        enemy = ordinaryEnemies(areas.sylvan).find(candidate => candidate.visual === (target === 'soul' ? 'flying' : 'ground') && !candidate.restored);
+      }
+      startBattle(enemy);
+      return { health: playerState.health, points: playerState.divinePoints };
+    }, target);
+    await page.locator('#defend-action').click();
+    await page.evaluate(() => defendAction());
+    await page.waitForFunction(() => currentScreen === 'upgrades');
+    const result = await page.evaluate(() => ({ health: playerState.health, points: playerState.divinePoints,
+      restored: activeEnemy.restored, control: activeEnemy.control }));
+    assert.equal(result.health, before.health, `${target}: test defense prevents enemy damage`);
+    assert.equal(result.points, before.points + (target === 'soul' ? 10 : 5), `${target}: normal reward granted exactly once`);
+    assert.ok(result.restored && result.control === 0, `${target}: Defend restores the opponent`);
+    await page.locator('#close-upgrades').click();
+  }
+  assert.equal(await page.evaluate(() => Object.values(regionalBossStates).every(state => state.defeated)
+    && areas.azureApex.enemies.filter(enemy => enemy.permanentResident).length === 6), true,
+    'Cheat-assisted guardian victories still release the normal residents');
+  await page.evaluate(() => resetGame());
+  await page.keyboard.press('h');
+  assert.equal(await page.evaluate(() => daggerTestMode.enabled || daggerTestMode.inspections !== 0), false,
+    'New Game clears the test mode and inspection count');
+  console.log('Dagger keyboard sequence, all enemy types, rewards, boss progression and reset pass.');
 }
 
 (async () => {
@@ -463,6 +576,7 @@ async function verifyBossVisuals(page, label, inspectAlpha = false) {
     await verifyCastleRoute(desktop, 'desktop');
     await verifyGuardianProgression(desktop);
     await verifyBossVisuals(desktop, 'desktop', true);
+    await verifyScalingAndDagger(desktop);
     if (baseline) {
       const previous = await inspect(await browser.newPage({ viewport: { width: 1280, height: 900 } }), origin + '/baseline/index.html');
       assert.deepEqual(current.initial, previous.initial, 'Initial map and enemy data must match baseline');

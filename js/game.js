@@ -361,8 +361,16 @@ function damageAfterEnemyDefense(attack, defense) {
 }
 
 function defendAction() {
-  if (battleBusy) return;
+  if (currentScreen !== "battle" || !activeEnemy || bossDefeated(activeEnemy) || battleBusy) return;
   setBattleButtons(true);
+  if (daggerTestMode.enabled) {
+    battleDefending = false;
+    playBattleEffect("defend-effect");
+    activeEnemy.control = 0;
+    updateBattleStats();
+    finishRestoration();
+    return;
+  }
   battleDefending = true;
   playBattleEffect("defend-effect");
   document.querySelector("#battle-message").textContent = playerState.strongDefend
@@ -433,24 +441,28 @@ function buyUpgrade(type) {
   if (upgrade.choiceGroup && choicesUsed >= upgrade.choiceLimit) { document.querySelector("#upgrade-message").textContent = "You can choose only two upgrades from this branch."; return; }
   if (playerState.divinePoints < upgrade.cost) { document.querySelector("#upgrade-message").textContent = `You need ${upgrade.cost} Divine Points.`; return; }
   playerState.divinePoints -= upgrade.cost; playerState.upgrades[type] = 1;
+  if (["wither", "strengthen", "healOverTime"].includes(type)) {
+    playerState.maxHealth += 3;
+    playerState.health = Math.min(playerState.maxHealth, playerState.health + 3);
+  }
   if (type === "damage") { playerState.restorePower += 5; document.querySelector("#upgrade-message").textContent = "Radiant Force I learned. Attack rises by 5."; }
   if (type === "defense") { playerState.defense += 5; document.querySelector("#upgrade-message").textContent = "Pristine Guard I learned. Defense rises by 5."; }
   if (type === "health") { playerState.maxHealth += 5; playerState.health = playerState.maxHealth; document.querySelector("#upgrade-message").textContent = "Soul Light I learned. Maximum health increased."; }
   if (type === "lifeSteal") { playerState.maxHealth += 3; playerState.health = Math.min(playerState.maxHealth, playerState.health + 3); playerState.lifeSteal = 1; document.querySelector("#upgrade-message").textContent = "Soul Siphon I learned. Health rises by 3 and attacks now restore health."; }
   if (type === "greaterHealth") { playerState.maxHealth += 13; playerState.health = playerState.maxHealth; playerState.healAmount += 5; document.querySelector("#upgrade-message").textContent = "Greater Soul Light learned."; }
-  if (type === "greaterDamage") { playerState.restorePower += 3; document.querySelector("#upgrade-message").textContent = "Radiant Force II learned. Attack rises by 3."; }
-  if (type === "magic") { playerState.restorePower += 3; playerState.magic = true; updateBattleActions(); document.querySelector("#upgrade-message").textContent = "Split Spellcraft learned."; }
+  if (type === "greaterDamage") { playerState.restorePower += 5; document.querySelector("#upgrade-message").textContent = "Radiant Force II learned. Attack rises by 5."; }
+  if (type === "magic") { playerState.restorePower += 4; playerState.magic = true; updateBattleActions(); document.querySelector("#upgrade-message").textContent = "Split Spellcraft learned. Attack rises by 4."; }
   if (type === "greaterDefense") { playerState.defense += 3; playerState.strongDefend = true; document.querySelector("#upgrade-message").textContent = "Pristine Guard II learned."; }
   if (type === "thorns") { playerState.defense += 3; playerState.thorns = true; document.querySelector("#upgrade-message").textContent = "Pristine Thorns learned."; }
-  if (type === "critRate") { playerState.criticalChance = 0.30; document.querySelector("#upgrade-message").textContent = "Crit Rate learned: 30% critical chance."; }
-  if (type === "doubleAttack") { playerState.doubleAttack = true; document.querySelector("#upgrade-message").textContent = "Double Attack learned: 15% chance to strike twice."; }
+  if (type === "critRate") { playerState.restorePower += 3; playerState.criticalChance = 0.30; document.querySelector("#upgrade-message").textContent = "Crit Rate learned: Attack rises by 3; 30% critical chance."; }
+  if (type === "doubleAttack") { playerState.restorePower += 3; playerState.doubleAttack = true; document.querySelector("#upgrade-message").textContent = "Double Attack learned: Attack rises by 3; 15% chance to strike twice."; }
   if (type === "lightSpell2") { playerState.lightSpellBonus = 3; document.querySelector("#upgrade-message").textContent = "Light Spell 2 learned: +3 damage."; }
   if (type === "soulSpell2") { playerState.soulSpellBonus = 1; playerState.soulSpellStunBonus = 1; document.querySelector("#upgrade-message").textContent = "Soul Spell 2 learned."; }
-  if (type === "wither") { playerState.wither = true; document.querySelector("#upgrade-message").textContent = "Wither learned: every 5 hits remove 15% maximum Control, or 5% against bosses."; }
+  if (type === "wither") { playerState.wither = true; document.querySelector("#upgrade-message").textContent = "Wither learned: Health rises by 3; every 5 hits remove 15% maximum Control, or 5% against bosses."; }
   if (type === "higherHealth") { playerState.maxHealth += 10; playerState.health = playerState.maxHealth; document.querySelector("#upgrade-message").textContent = "Higher Health learned: +10 maximum health."; }
-  if (type === "strengthen") { document.querySelector("#upgrade-message").textContent = "Strengthen learned. Heal now opens battle boosts."; }
-  if (type === "healOverTime") { playerState.healOverTime = true; document.querySelector("#upgrade-message").textContent = "Heal Over Time learned."; }
-  if (type === "dodge") { document.querySelector("#upgrade-message").textContent = "Dodge learned: 7% chance to avoid attacks."; }
+  if (type === "strengthen") { document.querySelector("#upgrade-message").textContent = "Strengthen learned. Health rises by 3; Heal now opens battle boosts."; }
+  if (type === "healOverTime") { playerState.healOverTime = true; document.querySelector("#upgrade-message").textContent = "Heal Over Time learned. Health rises by 3."; }
+  if (type === "dodge") { playerState.defense += 3; document.querySelector("#upgrade-message").textContent = "Dodge learned: Defense rises by 3; 7% chance to avoid attacks."; }
   updateUpgradeButtons();
 }
 function updateUpgradeButtons() {
@@ -469,6 +481,8 @@ function updateUpgradeButtons() {
   updateHud();
 }
 function resetGame() {
+  daggerTestMode.inspections = 0;
+  daggerTestMode.enabled = false;
   window.clearTimeout(restorationTimer);
   restorationTimer = null;
   clearAttackTiming();
@@ -582,7 +596,12 @@ window.addEventListener("keydown", (event) => {
     return;
   }
 
-  if (key === "z" || key === "enter") usePrompt();
+  if (key === "h" && !event.repeat && currentScreen === "game" && gameMode === "area"
+    && currentAreaId === "pristineCastle" && daggerTestMode.inspections >= 3 && !daggerTestMode.enabled) {
+    daggerTestMode.enabled = true;
+    showTemporaryPrompt("Dagger test mode enabled. Defend instantly restores enemies.");
+  }
+  if ((key === "z" || key === "enter") && !event.repeat) usePrompt();
   if (key === "m" && currentScreen === "game" && gameMode === "area" && (currentAreaId !== "pristineCastle" || castleState.exitCleared)) leaveArea();
   if (key === "u" && currentScreen === "game") {
     updateUpgradeButtons();

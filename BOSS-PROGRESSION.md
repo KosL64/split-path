@@ -36,17 +36,39 @@ The stairs remain available without defeating all three guardians.
 
 The actual purchase flow increases player stats correctly. Buying Health,
 Greater Health, Higher Health, Damage, Greater Damage, Defense, and Greater
-Defense produces 48 maximum health, 13 attack, and 11 defense.
+Defense produces 48 maximum health, 15 attack, and 11 defense.
+
+The Power Scaling 2 update also grants +3 maximum/current health with Wither,
+Strengthen, or Heal Over Time; +3 attack with Crit Rate or Double Attack; and
++3 defense with Dodge. Greater Damage now grants +5 attack and Magic grants
++4 attack. Existing branch choices, costs and ability behavior are retained.
 
 Ordinary level 50 enemies currently have 53 attack, so they deal 42 damage
 against that defense, or 84 on a critical hit. Level 100 enemies and Kyle have
 103 attack, dealing 92 damage before critical hits. Those enemies can kill a
-fully upgraded player in one critical or ordinary hit respectively.
+player using that upgrade selection in one critical or ordinary hit respectively.
 
 This confirms a late-game scaling gap, not a failure to apply purchased stats.
-The requested soul rewards and Wither buff are implemented. Ordinary stat
-formulas, upgrade amounts, and Kyle's stats have not been silently rebalanced;
-player growth versus ordinary enemy scaling needs a separate tuning decision.
+The requested soul rewards, Wither buff and Power Scaling 2 upgrade bonuses
+are implemented. Ordinary stat formulas and Kyle's stats are unchanged;
+player growth versus ordinary enemy scaling still needs a separate tuning decision.
+
+## Temporary Dagger Test Mode
+
+In Pristine Castle, stand over the dusty dagger and inspect it with three
+separate Z presses, then press H while still in the castle. A confirmation
+appears. Holding Z does not count as multiple inspections, and H cannot enable
+the shortcut outside the castle or before the third inspection.
+
+While active, Defend instantly restores the current opponent without an enemy
+counterattack. It works for cubes, souls, guardians and Kyle, using normal
+victory rewards and boss progression. New Game clears the inspection count and
+the mode. It is not saved between page reloads.
+
+This shortcut is temporary. To remove it later, remove `daggerTestMode` from
+`js/game-state.js`, its counting branch in `interactWithCastle`, the H-key
+activation and reset entries in `js/game.js`, and its `defendAction` branch.
+Keep the ordinary Defend validity guard and key-repeat suppression.
 
 ## Sprite Preparation
 

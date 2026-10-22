@@ -1023,7 +1023,11 @@ function interactWithCastle(feature) {
   }
 
   if (feature === "cloaks") showTemporaryPrompt("they dont seem to fit you.");
-  if (feature === "dagger") showTemporaryPrompt("its covered in dust.");
+  if (feature === "dagger" && currentScreen === "game" && gameMode === "area"
+    && currentAreaId === "pristineCastle" && nearbyCastleFeature() === "dagger") {
+    daggerTestMode.inspections = Math.min(3, daggerTestMode.inspections + 1);
+    showTemporaryPrompt("its covered in dust.");
+  }
 }
 
 function sitOnThrone() {
