@@ -110,9 +110,13 @@ function drawAreaMap() {
     }
   }
 
+  if (area.garageHome) drawVillageGarageHouse(area.garageHome.x * config.tileSize - cameraX, area.garageHome.y * config.tileSize - cameraY, palette);
   drawAreaRocks(area, cameraX, cameraY);
-  if (currentAreaId === "pristineCastle") drawCastleWallDecorations(cameraX, cameraY);
-  area.enemies.filter((enemy) => !enemy.relocated).forEach((enemy) => drawEnemy(enemy, cameraX, cameraY));
+  if (currentAreaId === "pristineCastle") {
+    drawCastleThrone((area.throne.x + 1) * config.tileSize - cameraX, (area.throne.y + 1) * config.tileSize - cameraY);
+    drawCastleWallDecorations(cameraX, cameraY);
+  }
+  visibleAreaEnemies().forEach((enemy) => drawEnemy(enemy, cameraX, cameraY));
   drawVillageResidents(cameraX, cameraY);
   const subtitle = currentAreaId === "pristineCastle"
     ? playerState.hasStaff
@@ -305,7 +309,6 @@ function drawTile(tile, x, y, healed, areaId) {
     ctx.stroke();
   }
 
-  if (tile === "H") drawCastleThrone(x, y);
   if (tile === "V") drawFallenKingStatue(x, y);
   if (tile === "D") drawDustyDagger(x, y);
 
@@ -328,37 +331,40 @@ function drawTile(tile, x, y, healed, areaId) {
     ctx.strokeRect(x + 9, y + 9, size - 18, size - 18);
   }
 
+  if (tile === "<" || tile === ">") {
+    ctx.fillStyle = "#c4c0ba";
+    ctx.fillRect(x + 6, y + 5, size - 12, size - 10);
+    ctx.strokeStyle = "#47424f";
+    ctx.lineWidth = 3;
+    for (let step = 0; step < 4; step += 1) {
+      const inset = tile === "<" ? 6 + step * 3 : 15 - step * 3;
+      ctx.strokeRect(x + inset, y + 9 + step * 7, size - inset * 2, 6);
+    }
+  }
+
   ctx.strokeStyle = "rgba(243,238,225,.05)";
   ctx.lineWidth = 1;
   if (!grassy) ctx.strokeRect(x, y, size, size);
 }
 
 function drawCastleThrone(x, y) {
+  const left = x - 48;
+  const top = y - 48;
   ctx.fillStyle = "#4b394b";
-  ctx.fillRect(x + 4, y - 8, 40, 54);
+  roundRect(left + 8, top + 8, 128, 132, 10); ctx.fill();
   ctx.fillStyle = "#8e263f";
-  ctx.fillRect(x + 10, y - 2, 28, 39);
+  roundRect(left + 28, top + 30, 88, 88, 8); ctx.fill();
   ctx.fillStyle = "#c59c42";
-  ctx.fillRect(x + 2, y + 32, 44, 10);
-  ctx.fillRect(x + 5, y - 12, 7, 60);
-  ctx.fillRect(x + 36, y - 12, 7, 60);
-  ctx.strokeStyle = "#29232c";
-  ctx.lineWidth = 3;
-  ctx.strokeRect(x + 4, y - 8, 40, 54);
-
+  ctx.fillRect(left + 4, top + 112, 136, 22);
+  ctx.fillRect(left + 12, top + 2, 18, 136);
+  ctx.fillRect(left + 114, top + 2, 18, 136);
+  ctx.strokeStyle = "#29232c"; ctx.lineWidth = 5; ctx.strokeRect(left + 8, top + 8, 128, 132);
   if (!playerState.hasStaff) {
-    ctx.strokeStyle = "#f2d93d";
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(x + 38, y - 7);
-    ctx.lineTo(x + 26, y + 33);
-    ctx.moveTo(x + 34, y - 6);
-    ctx.lineTo(x + 42, y - 11);
-    ctx.lineTo(x + 43, y - 2);
-    ctx.stroke();
+    ctx.strokeStyle = "#f2d93d"; ctx.lineWidth = 4; ctx.beginPath();
+    ctx.moveTo(left + 92, top + 58); ctx.lineTo(left + 80, top + 98);
+    ctx.moveTo(left + 88, top + 59); ctx.lineTo(left + 96, top + 54); ctx.lineTo(left + 97, top + 63); ctx.stroke();
   }
 }
-
 function drawFallenKingStatue(x, y) {
   ctx.save();
   ctx.translate(x + 2, y + 34);
@@ -646,17 +652,20 @@ function drawEnemy(enemy, cameraX, cameraY) {
   const x = enemy.x - cameraX;
   const y = enemy.y - cameraY;
 
-  if (enemy.kind === "boss" && kyleSprite.complete && kyleSprite.naturalWidth > 0) {
+  const bossSprite = enemy.regionBoss ? regionalBossSprites[enemy.regionBoss] : kyleSprite;
+  if (enemy.kind === "boss" && bossSprite.complete && bossSprite.naturalWidth > 0) {
     ctx.save();
     ctx.fillStyle = "rgba(0,0,0,.32)";
     ctx.beginPath();
     ctx.ellipse(x + enemy.width / 2, y + enemy.height - 1, 28, 8, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.drawImage(kyleSprite, x - 18, y - 55, 82, 108);
+    const height = 108;
+    const width = height * bossSprite.naturalWidth / bossSprite.naturalHeight;
+    ctx.drawImage(bossSprite, x + enemy.width / 2 - width / 2, y + enemy.height - height, width, height);
     ctx.restore();
     ctx.font = "900 13px Trebuchet MS";
     ctx.fillStyle = "#f2c95f";
-    ctx.fillText("Kyle | Lv 100", x - 20, y - 65);
+    ctx.fillText(`${enemy.name} | Lv ${enemy.level}`, x - 32, y - 65);
     return;
   }
 
@@ -727,8 +736,12 @@ function drawEnemy(enemy, cameraX, cameraY) {
 
 function drawRestoredCube(enemy, x, y) {
   ctx.save();
-  ctx.shadowColor = "rgba(242,201,95,.8)";
-  ctx.shadowBlur = 18;
+  ctx.fillStyle = "rgba(0,0,0,.28)";
+  ctx.beginPath();
+  ctx.ellipse(x + enemy.width / 2, y + enemy.height + 1, enemy.width / 2, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  ctx.save();
   ctx.fillStyle = "#f1ead8";
   roundRect(x, y, enemy.width, enemy.height, 9);
   ctx.fill();
@@ -836,7 +849,19 @@ function drawVillageHouse(x, y, palette) {
   ctx.fillRect(x + 35, y + 20, 9, 10);
   ctx.restore();
 }
-
+function drawVillageGarageHouse(x, y, palette) {
+  const size = config.tileSize;
+  ctx.save();
+  ctx.fillStyle = "rgba(0,0,0,.22)";
+  ctx.beginPath(); ctx.ellipse(x + size * 1.5, y + size * 2 + 5, size * 1.65, 10, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = palette.houseRoof; ctx.strokeStyle = "#242129"; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.moveTo(x + size * 1.5, y - 28); ctx.lineTo(x - 10, y + 24); ctx.lineTo(x + size * 3 + 10, y + 24); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = palette.houseBody; roundRect(x, y + 22, size * 3, size * 1.75, 6); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = palette.door; ctx.fillRect(x + size * .25, y + size * 1.1, size * .42, size * .65);
+  ctx.fillStyle = "#62727a"; ctx.fillRect(x + size * 1.25, y + size * .82, size * 1.45, size * .93);
+  ctx.strokeStyle = "#2a3137"; ctx.lineWidth = 3; ctx.strokeRect(x + size * 1.25, y + size * .82, size * 1.45, size * .93);
+  ctx.restore();
+}
 function drawTree(x, y, scale, leafColor = "#7ac878") {
   ctx.fillStyle = "#6b4f22";
   ctx.fillRect(x + 15 * scale, y + 25 * scale, 8 * scale, 22 * scale);

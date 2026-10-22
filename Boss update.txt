@@ -1,0 +1,9 @@
+ok, just played with the hacks and everything works perfectly. one minor update before i work on what will probably be one of the actual biggest updates EVER. 
+
+1. the bosses can move, and they are actually aggressive. they can move faster then the king, EVEN IF HE SPRINTS, and their agro bubble is every direction from them. kinda like a plus sign, but it just goes up, down, left and right and their is like... no limit on how far they see you from. The only way to break agro is to be "behind" a tree or... anything other then a rock, out of their line of sight for 5 seconds. then they will just walk away, and YES, AWAY!!!
+
+2. make the bosses stats like an actual enemy that is that level. I was able to beat the Controlled plains boss with no hacks. a normal level 100 enemy would have way higher stats. ALSO, so... you know how Controlled Souls stats are multiplied, make the boss stats 2x a normal enemy. 
+
+3. when you encounter the bosses, make it say "A guardian has appeared."
+
+4. Make the Bosses actually be able to move and not just stand there. if you touch you the battle starts. 

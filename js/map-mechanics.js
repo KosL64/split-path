@@ -13,6 +13,19 @@ let activeHouse = null;
 let bossDialogue = [];
 let bossDialogueIndex = 0;
 let activeCastleFeature = null;
+const regionalBossStates = {};
+
+function ordinaryEnemies(area) {
+  return area.enemies.filter((enemy) => enemy.kind !== "boss" && !enemy.permanentResident);
+}
+
+function bossDefeated(enemy) {
+  return enemy.restored || (enemy.regionBoss && regionalBossStates[enemy.regionBoss].defeated);
+}
+
+function visibleAreaEnemies(areaId = currentAreaId) {
+  return areas[areaId].enemies.filter((enemy) => enemy.kind === "boss" ? !bossDefeated(enemy) : !enemy.relocated);
+}
 
 const castleState = {
   exitCleared: false,
@@ -25,11 +38,14 @@ const castleState = {
 // Combat reports restoration here; map progression owns the resulting world changes.
 function restoreMapEnemy(enemy, areaId) {
   enemy.restored = true;
-  if (enemy.kind !== "boss") initializeVillageResident(enemy);
+  if (enemy.regionBoss) defeatRegionalBoss(enemy.regionBoss);
+  if (enemy.kind !== "boss" && !enemy.permanentResident) initializeVillageResident(enemy);
   const area = areas[areaId];
-  const remainingEnemies = area.enemies.filter((candidate) => !candidate.restored).length;
-  const areaCleared = area.enemies.length > 0 && remainingEnemies === 0;
+  const ordinary = ordinaryEnemies(area);
+  const remainingEnemies = ordinary.filter((candidate) => !candidate.restored).length;
+  const areaCleared = ordinary.length > 0 ? remainingEnemies === 0 : area.enemies.some((candidate) => candidate.kind === "boss") && area.enemies.filter((candidate) => candidate.kind === "boss").every(bossDefeated);
   area.healed = areaCleared;
+  revealRegionalBosses();
   updatePlainsRestoration();
   updateVillageLocks();
   return { area, remainingEnemies, areaCleared };
@@ -44,6 +60,7 @@ function resetMapState() {
     standY: 0
   });
   Object.values(areas).forEach((area) => {
+    area.enemies = area.enemies.filter((enemy) => !enemy.permanentResident && !enemy.regionBoss);
     area.healed = !!area.signs;
     area.enemies.forEach((enemy) => {
       enemy.restored = false;
@@ -72,6 +89,7 @@ function resetMapState() {
       enemy.y = enemy.spawnY;
     });
   });
+  initializeRegionalBosses();
   kingdomMap.nodes.forEach((node) => {
     node.unlocked = node.kind !== "village";
   });
@@ -81,7 +99,7 @@ function resetMapState() {
 }
 
 function initializeBoss() {
-  const area = areas.controlledPalace;
+  const area = areas.palaceUpper;
   const stats = statsForLevel(100);
   const bossHealth = 1000;
   area.enemies = [{
@@ -89,7 +107,7 @@ function initializeBoss() {
     name: "Kyle",
     kind: "boss",
     visual: "boss",
-    originArea: "controlledPalace",
+    originArea: "palaceUpper",
     level: 100,
     attack: stats.attack,
     defense: stats.defense,
@@ -114,6 +132,63 @@ function initializeBoss() {
     movingUntil: 0,
     waitUntil: 0
   }];
+  initializeRegionalBosses();
+}
+
+function initializeRegionalBosses() {
+  areas.controlledPalace.enemies = [];
+  Object.entries(regionalBossDefinitions).forEach(([region, definition]) => {
+    const enemy = {
+      id: `${region}-guardian-palace`, name: definition.name, regionBoss: region,
+      kind: "boss", visual: "boss", originArea: region,
+      level: definition.level, attack: definition.attack, defense: definition.defense,
+      maxHealth: definition.health, controlMax: definition.health, control: definition.health,
+      x: definition.palaceX * config.tileSize + 3, y: 9 * config.tileSize,
+      width: 42, height: 48, stationary: true, restored: false, facing: -1,
+      route: [], moveX: 0, moveY: 0
+    };
+    enemy.spawnX = enemy.x;
+    enemy.spawnY = enemy.y;
+    regionalBossStates[region] = { defeated: false, revealed: false, palaceEnemy: enemy };
+    areas.controlledPalace.enemies.push(enemy);
+  });
+}
+
+function revealRegionalBosses() {
+  Object.entries(regionalBossStates).forEach(([region, state]) => {
+    const enemies = ordinaryEnemies(areas[region]);
+    if (state.defeated || state.revealed || !enemies.length || enemies.some((enemy) => !enemy.restored)) return;
+    const tiles = collectEnemySpawnTiles(areas[region]);
+    const spawn = tiles.find((tile) => tile.x > 5 && tile.y > 5) || tiles[0];
+    const enemy = { ...state.palaceEnemy, id: `${region}-guardian-home`, x: spawn.x * config.tileSize + 3, y: spawn.y * config.tileSize, route: [] };
+    enemy.spawnX = enemy.x;
+    enemy.spawnY = enemy.y;
+    areas[region].enemies.push(enemy);
+    state.revealed = true;
+  });
+}
+
+function defeatRegionalBoss(region) {
+  const state = regionalBossStates[region];
+  if (state.defeated) return;
+  state.defeated = true;
+  Object.values(areas).forEach((area) => area.enemies.forEach((enemy) => {
+    if (enemy.regionBoss === region) enemy.restored = true;
+  }));
+  const definition = regionalBossDefinitions[region];
+  const area = areas[region];
+  const tiles = collectEnemySpawnTiles(area);
+  for (let index = 0; index < definition.cubes + definition.souls; index += 1) {
+    const tile = tiles[(index * 7) % tiles.length];
+    area.enemies.push({
+      id: `${region}-released-${index}`, visual: index < definition.cubes ? "ground" : "flying",
+      originArea: region, permanentResident: true, restored: true, relocated: false,
+      x: tile.x * config.tileSize + 7, y: tile.y * config.tileSize + 5,
+      width: 34, height: 38, level: 1, facing: 1, talked: false,
+      moveX: 0, moveY: 0, movingUntil: 0, waitUntil: 0, route: [], control: 0, controlMax: 1
+    });
+  }
+  areas.controlledPalace.healed = Object.values(regionalBossStates).every((boss) => boss.defeated);
 }
 
 function initializeAreaRockDecorations() {
@@ -298,7 +373,8 @@ function seedFromText(text) {
 function enterKingdom() {
   clearInteractionState();
   gameMode = "kingdom";
-  const node = kingdomMap.nodes.find((mapNode) => mapNode.areaId === currentAreaId) || kingdomMap.nodes[0];
+  const kingdomAreaId = areas[currentAreaId].kingdomAreaId || currentAreaId;
+  const node = kingdomMap.nodes.find((mapNode) => mapNode.areaId === kingdomAreaId) || kingdomMap.nodes[0];
   player.x = node.x - player.width / 2;
   player.y = node.y - player.height / 2;
   updateHud();
@@ -327,8 +403,17 @@ function leaveArea() {
 
 function relocateRestoredEnemies(areaId) {
   areas[areaId].enemies.forEach((enemy) => {
-    if (enemy.kind !== "boss" && enemy.restored) enemy.relocated = true;
+    if (enemy.kind !== "boss" && enemy.restored && !enemy.permanentResident) enemy.relocated = true;
   });
+}
+
+function usePalaceStairs() {
+  const stairs = areas[currentAreaId].stairs;
+  if (!stairs) return;
+  enterArea(stairs.target);
+  player.x = stairs.arrival.x * config.tileSize + 2;
+  player.y = stairs.arrival.y * config.tileSize;
+  updateCamera();
 }
 
 function clearInteractionState() {
@@ -403,7 +488,7 @@ function moveEnemies() {
     if (pauseResidentConversation(enemy, enemy, performance.now())) return;
     if (enemy.stationary) return;
     if (enemy.restored) {
-      if (!enemy.relocated && enemy.visual === "ground") moveEnemy(enemy);
+      if (!enemy.relocated && (enemy.visual === "ground" || enemy.permanentResident)) moveEnemy(enemy);
       return;
     }
     moveEnemy(enemy);
@@ -460,7 +545,7 @@ function moveEnemy(enemy) {
     return;
   }
 
-  if (enemy.visual === "flying" && now >= contactLockedUntil) {
+  if (!enemy.restored && enemy.visual === "flying" && now >= contactLockedUntil) {
     const size = config.tileSize;
     const playerCol = Math.floor((player.x + player.width / 2) / size);
     const playerRow = Math.floor((player.y + player.height / 2) / size);
@@ -667,7 +752,7 @@ function collidesWithBlockedTile(rect) {
 }
 
 function isBlockedTile(tile) {
-  return !tile || tile === "^" || tile === "T" || tile === "W" || tile === "H" || tile === "V" || tile === "h" || (tile === "B" && !castleState.exitCleared);
+  return !tile || tile === "^" || tile === "T" || tile === "W" || tile === "H" || tile === "K" || tile === "V" || tile === "h" || tile === "L" || (tile === "B" && !castleState.exitCleared);
 }
 
 function updateCamera() {
@@ -683,6 +768,7 @@ function updateCamera() {
 }
 
 function updateInteractionPrompt() {
+  if (currentScreen !== "game") return;
   if (performance.now() < dialogueUntil) return;
   if (promptMode === "boss-dialogue") return;
   activeNode = null;
@@ -707,7 +793,7 @@ function updateInteractionPrompt() {
       activeCastleFeature = castleFeature;
       promptMode = `castle-${castleFeature}`;
       const prompts = {
-        throne: playerState.hasStaff ? "Press Z to sit on the throne" : "Press Z to reclaim your staff",
+        throne: castleState.sitting ? "Press Z to stand up" : playerState.hasStaff ? "Press Z to sit on the throne" : "Press Z to reclaim your staff",
         rocks: playerState.hasStaff ? "Press Z to shatter the fallen rocks" : "You need your staff to clear these rocks",
         cloaks: "Press Z to inspect the old cloaks",
         dagger: "Press Z to inspect the dusty dagger"
@@ -716,11 +802,19 @@ function updateInteractionPrompt() {
       return;
     }
 
-    const boss = areas[currentAreaId].enemies.find((enemy) => enemy.kind === "boss" && !enemy.restored && rectanglesOverlap(player, enemy));
+    const stairs = areas[currentAreaId].stairs;
+    if (stairs && Math.abs(player.x + player.width / 2 - (stairs.x + 0.5) * config.tileSize) < config.tileSize
+      && Math.abs(player.y + player.height / 2 - (stairs.y + 0.5) * config.tileSize) < config.tileSize) {
+      promptMode = "palace-stairs";
+      setPrompt(currentAreaId === "palaceUpper" ? "Press Z to go downstairs" : "Press Z to climb to Kyle's chamber");
+      return;
+    }
+
+    const boss = areas[currentAreaId].enemies.find((enemy) => enemy.kind === "boss" && !bossDefeated(enemy) && rectanglesOverlap(player, enemy));
     if (boss) {
       activeEnemy = boss;
       promptMode = "challenge-boss";
-      setPrompt("Press Z to confront Kyle");
+      setPrompt(`Press Z to confront ${boss.name}`);
       return;
     }
 
@@ -767,6 +861,7 @@ function usePrompt() {
   if (promptMode === "read-sign") return readSign();
   if (promptMode === "challenge-boss") return beginBossDialogue();
   if (promptMode === "boss-dialogue") return advanceBossDialogue();
+  if (promptMode === "palace-stairs") return usePalaceStairs();
   if (promptMode.startsWith("castle-")) interactWithCastle(activeCastleFeature);
 }
 
@@ -796,7 +891,7 @@ function villageAreaForSource(sourceId) {
 function villageResidents(areaId = currentAreaId) {
   const sourceId = villageSourceFor(areaId);
   if (!sourceId) return [];
-  return areas[sourceId].enemies.filter((enemy) => enemy.restored && enemy.relocated && enemy.kind !== "boss");
+  return areas[sourceId].enemies.filter((enemy) => enemy.restored && enemy.relocated && enemy.kind !== "boss" && !enemy.permanentResident);
 }
 
 function residentPosition(index, villageAreaId = currentAreaId) {
@@ -891,7 +986,13 @@ function nearbyCastleFeature() {
   const playerRow = Math.floor((player.y + player.height / 2) / config.tileSize);
   const near = (x, y, radius = 1) => Math.abs(x - playerCol) <= radius && Math.abs(y - playerRow) <= radius;
 
-  if (near(12, 2)) return "throne";
+  const throne = areas.pristineCastle.throne;
+  const throneLeft = throne.x * config.tileSize;
+  const throneRight = (throne.x + throne.width) * config.tileSize;
+  const throneFront = (throne.y + throne.height) * config.tileSize;
+  const atThroneFront = player.x + player.width > throneLeft && player.x < throneRight
+    && player.y >= throneFront && player.y - throneFront <= config.tileSize * 0.75;
+  if (castleState.sitting || atThroneFront) return "throne";
   if (!castleState.exitCleared && ([11, 12, 13].some((x) => near(x, 13)))) return "rocks";
   if ([[19, 2], [20, 2], [21, 2]].some(([x, y]) => near(x, y))) return "cloaks";
   if (playerCol === 17 && playerRow === 6) return "dagger";
@@ -922,7 +1023,11 @@ function interactWithCastle(feature) {
   }
 
   if (feature === "cloaks") showTemporaryPrompt("they dont seem to fit you.");
-  if (feature === "dagger") showTemporaryPrompt("its covered in dust.");
+  if (feature === "dagger" && currentScreen === "game" && gameMode === "area"
+    && currentAreaId === "pristineCastle" && nearbyCastleFeature() === "dagger") {
+    daggerTestMode.inspections = Math.min(3, daggerTestMode.inspections + 1);
+    showTemporaryPrompt("its covered in dust.");
+  }
 }
 
 function sitOnThrone() {
@@ -930,8 +1035,10 @@ function sitOnThrone() {
   castleState.standY = player.y;
   castleState.sitting = true;
   castleState.sittingStartedAt = performance.now();
-  player.x = 12 * config.tileSize + 2;
-  player.y = 2 * config.tileSize - 4;
+  const throne = areas.pristineCastle.throne;
+  player.x = (throne.x + throne.width / 2) * config.tileSize - player.width / 2;
+  player.y = throne.y * config.tileSize + 112 - player.height - 6;
+  player.facing = 1;
   player.view = "front";
   showTemporaryPrompt("The throne remembers its King.", 1800);
 }
@@ -966,6 +1073,10 @@ function hasRestoredVeteran() {
 }
 
 function beginBossDialogue() {
+  if (activeEnemy?.regionBoss) {
+    startBattle(activeEnemy);
+    return;
+  }
   bossDialogue = hasRestoredVeteran()
     ? ["Ah king... your here at last.", "Your probably wondering who i am aren't you?", "well... its ???.", "But you can call me Kyle!"]
     : ["OH? who are you?", "no matter, ill just kill you anyways."];

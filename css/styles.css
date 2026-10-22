@@ -458,26 +458,52 @@ meter {
 }
 
 .attack-timing-track {
+  position: relative;
   flex: 1;
   min-width: 24px;
-  height: 8px;
+  height: 24px;
   overflow: hidden;
   background: #34313b;
+  opacity: .65;
+}
+
+.attack-timing-track::before,
+.attack-timing-track::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.attack-timing-track::before {
+  left: 38%;
+  width: 24%;
+  background: #568761;
+}
+
+.attack-timing-track::after {
+  left: 47.5%;
+  width: 5%;
+  background: #f2c95f;
 }
 
 .attack-timing-track span {
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  width: 4px;
   display: block;
   height: 100%;
-  background: #f2c95f;
-  transform-origin: left;
+  background: #ffffff;
+  transform: translateX(-50%);
 }
 
 .timing-open .attack-timing-track span {
-  animation: attack-countdown 1s linear forwards;
+  animation: attack-cursor .5s linear forwards;
 }
 
-@keyframes attack-countdown {
-  to { transform: scaleX(0); }
+@keyframes attack-cursor {
+  to { left: 100%; }
 }
 
 .battle-actions {
@@ -754,3 +780,7 @@ meter {
 @keyframes defend-pulse { 0% { transform: scale(1); } 50% { transform: scale(1.08); } 100% { transform: scale(1); } }
 @keyframes heal-glow { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
 @media (prefers-reduced-motion: reduce) { .battle-stage.attack-effect::after, .battle-stage.defend-effect .player-cube, .battle-stage.heal-effect .player-cube { animation-duration: .01ms; } }
+
+.tree-row-tier3 { grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; }
+.node-tier3 { min-height: 112px; font-size: .82rem; }
+@media (max-width: 640px) { .tree-row-tier3 { grid-template-columns: 1fr; } }
