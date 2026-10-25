@@ -6,10 +6,11 @@ opened directly, with no build step or module server.
 
 | File | Work here for |
 | --- | --- |
-| `js/map-data.js` | Kingdom routes, area layouts, tile placement, home slots, enemy counts and level ranges |
+| `js/map-data.js` | Region directory, area layouts, tile placement, home slots, enemy counts and level ranges |
 | `js/map-assets.js` | Map textures, rock and character sprite loading |
 | `js/map-mechanics.js` | Movement, collision, spawning, NPC behavior, pathfinding, camera, interactions, restoration progression, world reset |
 | `js/map-rendering.js` | World, castle, village, terrain, player and NPC canvas rendering |
+| `js/map-overworld.js` | Connected exterior placement, bridge, building portals, house interiors and shared exterior camera |
 | `js/game.js` | Combat, spells, timing bonuses, upgrades, story, UI bindings and game loop |
 | `js/game-state.js` | Shared player state, configuration, combat state and geometry/canvas helpers |
 | `css/styles.css` | HTML UI styling, including battle and upgrade screens |
@@ -17,7 +18,7 @@ opened directly, with no build step or module server.
 ## Loading And Shared State
 
 `index.html` loads `game-state`, `map-data`, `map-assets`, `map-mechanics`,
-`map-rendering`, then `game`. Keep that order. Only `game.js` starts world
+`map-rendering`, `map-overworld`, then `game`. Keep that order. Only `game.js` starts world
 initialization after all scripts have loaded. The map files define data, load
 images, and declare functions; they do not start the game loop or bind keys.
 
@@ -39,6 +40,9 @@ than expanding shared state unnecessarily.
   files. Keep these entry points stable when changing map internals.
 - Map rendering reads shared player/enemy state. It does not calculate battle
   damage or change spell use.
+- `initializeOverworld()` runs before enemy spawning, so village and building
+  footprints are excluded from enemy spawn choices. See `OVERWORLD.md` for
+  coordinates, region crossing and interior return rules.
 
 ## Branch Workflow
 
@@ -61,7 +65,8 @@ or the Codex desktop bundled runtime, and launches installed Edge by default.
 Set `PLAYWRIGHT_CHANNEL` when using another installed Playwright browser channel.
 The temporary HTTP test server and browser are closed when the test finishes.
 
-For this refactor, `node tests/map-regression.cjs --baseline=cb877e4` also compares
-initial map/enemy data and all seven area canvases plus the Kingdom Map canvas
-against the original committed game. Baseline comparisons require a compatible
-older game/UI; they are for this file split, not future intentional map redesigns.
+The suite also verifies full-hitbox routes to every exterior entrance, safe
+interior arrivals and returns, river collision, cross-region walking, restoration
+persistence, and desktop/mobile screenshots. The optional `--baseline` mode
+requires a compatible game/UI and should not be used to compare the connected
+overworld with the intentionally different old Kingdom Map selector.

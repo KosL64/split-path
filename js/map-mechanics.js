@@ -1,6 +1,6 @@
 // map-mechanics: see CODE-OWNERSHIP.md for shared state and loading order.
 
-let gameMode = "kingdom";
+let gameMode = "area";
 let currentAreaId = "sylvan";
 let contactLockedUntil = 0;
 let dialogueUntil = 0;
@@ -61,7 +61,7 @@ function resetMapState() {
   });
   Object.values(areas).forEach((area) => {
     area.enemies = area.enemies.filter((enemy) => !enemy.permanentResident && !enemy.regionBoss);
-    area.healed = !!area.signs;
+    area.healed = !!area.signs || !!area.houseInterior || !!area.world?.parent || area === areas.castleGrounds;
     area.enemies.forEach((enemy) => {
       enemy.restored = false;
       enemy.relocated = false;
@@ -90,7 +90,7 @@ function resetMapState() {
     });
   });
   initializeRegionalBosses();
-  kingdomMap.nodes.forEach((node) => {
+  regionDirectory.nodes.forEach((node) => {
     node.unlocked = node.kind !== "village";
   });
   updatePlainsRestoration();
@@ -344,7 +344,7 @@ function collectEnemySpawnTiles(area) {
   area.map.forEach((row, y) => {
     [...row].forEach((tile, x) => {
       const distanceFromStart = Math.hypot(x - area.start.x, y - area.start.y);
-      if (distanceFromStart < 4 || tile === "E" || isBlockedTile(tile)) return;
+      if (distanceFromStart < 4 || tile === "E" || tile === "d" || isBlockedTile(tile) || tileIsEmbeddedVillage(area, x, y)) return;
       if (tile === "C" || tile === "g") preferred.push({ x, y, tile });
       else if (tile === ".") fallback.push({ x, y, tile });
     });
@@ -370,35 +370,20 @@ function seedFromText(text) {
   return [...text].reduce((total, letter) => total + letter.charCodeAt(0) * 17, 97);
 }
 
-function enterKingdom() {
-  clearInteractionState();
-  gameMode = "kingdom";
-  const kingdomAreaId = areas[currentAreaId].kingdomAreaId || currentAreaId;
-  const node = kingdomMap.nodes.find((mapNode) => mapNode.areaId === kingdomAreaId) || kingdomMap.nodes[0];
-  player.x = node.x - player.width / 2;
-  player.y = node.y - player.height / 2;
-  updateHud();
-}
-
 function enterArea(areaId) {
   const area = areas[areaId];
   clearInteractionState();
   gameMode = "area";
   currentAreaId = areaId;
-  player.x = area.start.x * config.tileSize + 6;
+  player.x = area.start.x * config.tileSize + (config.tileSize - player.width) / 2;
   player.y = area.start.y * config.tileSize + 2;
   contactLockedUntil = performance.now() + config.contactCooldown;
   updateHud();
 }
 
 function leaveArea() {
-  relocateRestoredEnemies(currentAreaId);
-  areas[currentAreaId].enemies.forEach((enemy) => {
-    enemy.chasing = false;
-    enemy.route = [];
-    enemy.routeUntil = 0;
-  });
-  enterKingdom();
+  if (!isPlayerOnExit()) return;
+  returnToExterior();
 }
 
 function relocateRestoredEnemies(areaId) {
@@ -450,7 +435,7 @@ function movePlayer() {
   if (vertical < 0) player.view = "back";
   else if (horizontal || vertical > 0) player.view = "front";
 
-  const baseSpeed = gameMode === "kingdom" ? config.mapMoveSpeed : config.areaMoveSpeed;
+  const baseSpeed = config.areaMoveSpeed;
   const speed = isSprinting() ? baseSpeed * config.sprintMultiplier : baseSpeed;
   attemptMove(horizontal * speed, vertical * speed);
 }
@@ -468,11 +453,7 @@ function attemptMove(deltaX, deltaY) {
 function tryMove(deltaX, deltaY) {
   const next = { ...player, x: player.x + deltaX, y: player.y + deltaY };
 
-  if (gameMode === "kingdom") {
-    player.x = clamp(next.x, 0, kingdomMap.width - player.width);
-    player.y = clamp(next.y, 0, kingdomMap.height - player.height);
-    return;
-  }
+  if (areas[currentAreaId].world) return moveOverworldPlayer(next);
 
   if (!collidesWithBlockedTile(next)) {
     player.x = next.x;
@@ -737,6 +718,11 @@ function chooseEnemyDirection(enemy) {
 
 function collidesWithBlockedTile(rect) {
   const area = areas[currentAreaId];
+  if (area.world && !rect.id) return worldRectBlocked({ ...rect,
+    x: rect.x + area.world.x * config.tileSize, y: rect.y + area.world.y * config.tileSize });
+  if (rect.id && tileIsEmbeddedVillage(area,
+    Math.floor((rect.x + rect.width / 2) / config.tileSize),
+    Math.floor((rect.y + rect.height / 2) / config.tileSize))) return true;
   const left = Math.floor(rect.x / config.tileSize);
   const right = Math.floor((rect.x + rect.width - 1) / config.tileSize);
   const top = Math.floor(rect.y / config.tileSize);
@@ -752,19 +738,24 @@ function collidesWithBlockedTile(rect) {
 }
 
 function isBlockedTile(tile) {
-  return !tile || tile === "^" || tile === "T" || tile === "W" || tile === "H" || tile === "K" || tile === "V" || tile === "h" || tile === "L" || (tile === "B" && !castleState.exitCleared);
+  return !tile || tile === "^" || tile === "T" || tile === "W" || tile === "H" || tile === "K" || tile === "V" || tile === "h" || tile === "L" || tile === "F" || tile === "b" || tile === "t" || (tile === "B" && !castleState.exitCleared);
 }
 
 function updateCamera() {
-  if (gameMode === "kingdom") {
-    kingdomMap.cameraX = clamp(player.x - canvas.width / 2, 0, kingdomMap.width - canvas.width);
-    kingdomMap.cameraY = clamp(player.y - canvas.height / 2, 0, kingdomMap.height - canvas.height);
+  const area = areas[currentAreaId];
+  if (area.world) {
+    overworld.cameraX = clamp(player.x + area.world.x * config.tileSize - canvas.width / 2, 0, overworld.width * config.tileSize - canvas.width);
+    overworld.cameraY = clamp(player.y + area.world.y * config.tileSize - canvas.height / 2, 0, overworld.height * config.tileSize - canvas.height);
+    area.cameraX = overworld.cameraX - area.world.x * config.tileSize;
+    area.cameraY = overworld.cameraY - area.world.y * config.tileSize;
     return;
   }
-
-  const area = areas[currentAreaId];
-  area.cameraX = clamp(player.x - canvas.width / 2, 0, area.width * config.tileSize - canvas.width);
-  area.cameraY = clamp(player.y - canvas.height / 2, 0, area.height * config.tileSize - canvas.height);
+  area.cameraX = area.width * config.tileSize < canvas.width
+    ? (area.width * config.tileSize - canvas.width) / 2
+    : clamp(player.x - canvas.width / 2, 0, area.width * config.tileSize - canvas.width);
+  area.cameraY = area.height * config.tileSize < canvas.height
+    ? (area.height * config.tileSize - canvas.height) / 2
+    : clamp(player.y - canvas.height / 2, 0, area.height * config.tileSize - canvas.height);
 }
 
 function updateInteractionPrompt() {
@@ -777,14 +768,11 @@ function updateInteractionPrompt() {
   activeCastleFeature = null;
   promptMode = "";
 
-  if (gameMode === "kingdom") {
-    const node = kingdomMap.nodes.find((mapNode) => distanceToPoint(mapNode.x, mapNode.y) < 56);
-    if (node) {
-      activeNode = node;
-      promptMode = node.unlocked ? "enter-area" : "";
-      setPrompt(node.unlocked ? `Press Z to enter ${node.name}` : `${node.name} is still sealed`);
-      return;
-    }
+  const portal = nearbyWorldPortal();
+  if (portal) {
+    promptMode = "world-portal";
+    setPrompt(`Press Z to enter ${portal.label}`);
+    return;
   }
 
   if (gameMode === "area") {
@@ -844,7 +832,7 @@ function updateInteractionPrompt() {
 
     if (isPlayerOnExit()) {
       promptMode = "leave-area";
-      setPrompt("Press Z to return to the Kingdom Map");
+      setPrompt("Press Z to go outside");
       return;
     }
   }
@@ -854,7 +842,7 @@ function updateInteractionPrompt() {
 
 function usePrompt() {
   if (currentScreen !== "game") return;
-  if (promptMode === "enter-area" && activeNode?.unlocked) return enterArea(activeNode.areaId);
+  if (promptMode === "world-portal") return enterWorldPortal();
   if (promptMode === "leave-area") return leaveArea();
   if (promptMode === "talk") return talkToNpc();
   if (promptMode === "inspect-house") return inspectHouse();
@@ -881,11 +869,11 @@ function nearestEnemy(restoredOnly = false) {
 }
 
 function villageSourceFor(areaId) {
-  return kingdomMap.nodes.find((node) => node.areaId === areaId)?.residentsFrom || null;
+  return regionDirectory.nodes.find((node) => node.areaId === areaId)?.residentsFrom || null;
 }
 
 function villageAreaForSource(sourceId) {
-  return kingdomMap.nodes.find((node) => node.kind === "village" && node.residentsFrom === sourceId)?.areaId || null;
+  return regionDirectory.nodes.find((node) => node.kind === "village" && node.residentsFrom === sourceId)?.areaId || null;
 }
 
 function villageResidents(areaId = currentAreaId) {
@@ -1065,7 +1053,7 @@ function readSign() {
 
 function inspectHouse() {
   if (!activeHouse) return;
-  showTemporaryPrompt(`${activeHouse.label} is warm, quiet, and just big enough to step inside.`, 2600);
+  enterWorldPortal();
 }
 
 function hasRestoredVeteran() {
@@ -1125,7 +1113,7 @@ function checkAreaEncounters() {
 }
 
 function updateVillageLocks() {
-  kingdomMap.nodes.forEach((node) => {
+  regionDirectory.nodes.forEach((node) => {
     if (node.kind !== "village") return;
     node.unlocked = true;
   });
@@ -1134,7 +1122,7 @@ function updateVillageLocks() {
 function updatePlainsRestoration() {
   const plains = areas.controlledPlains;
   plains.name = plains.healed ? "The Ancient Plains" : "Controlled Plains";
-  kingdomMap.nodes.find((node) => node.areaId === "controlledPlains").name = plains.name;
+  regionDirectory.nodes.find((node) => node.areaId === "controlledPlains").name = plains.name;
 }
 
 function talkToNpc() {
