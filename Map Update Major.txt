@@ -1,9 +1,13 @@
-ok. Mr. Aaron just made Sylvan and Azure Apex wider. now. were gonna combine everything (will send a picture for reference (it is called full castle map or castle map... something like that)). (MAJOR UPDATE!!!MAJOR UPDATE!!!MAJOR UPDATE!!!).  
+ok, the map is kinda small... as big as it is, its very small. 
 
-1. I'm gonna push a picture of the full map, but let me tell you something real quick. so... you know that like... mini map where you can enter all the areas? I want you to get rid of that. completely get rid of it. instead, i want the areas to be connected like a old Zelda like Map. 
+1. make the map, 3x bigger. its a lot, but whatever.
 
-2. Make the areas connected as if you go down from the bridge, it brings you to the top left of Sylvan. Azure Apex is directly below Sylvan thats why they have the same length. Controlled plains is directly to the left of both of those areas. Since the width of controlled plains is 78, and the width of Sylvan and Azure Apex combined is 78, just put it to the left of both areas.
+2.  make the bridge a stone bridge, and when you increase the size of the map, only increase the length of the bridge (the longer part (the part that goes downwards).
 
-3. so... you will spawn in the pristine castle still, but once you leave, its kinda like a staircase. so... you know when you hit the staircase in Kyles palace (controlled palace), it brings you up? so... basically have that be how the Pristine castle works. Have 3 layers of the map. 1 for the like... open world map, and then layer 2 be like all the houses, the pristine castle, and the first floor of the controlled palace. the 3rd layer is just for the second floor of the controlled palace if that makes sense. so you spawn in layer two (Pristine Castle), and then go into layer 1 (Open-world). 
+3.  you know that sylvan village is in the top right of sylvan... not the bottom/middle right... It should also have the same flooring as Sylvan. 
 
-Disclamer, if anything goes wrong, either delete the part of the update that goes wrong, or just keep it and listen to further instructions. 
+4. I pushed a picture of like... blue rocks, its in a Azure Apex folder in assets. use that for the flooring. 
+
+5. Add some trees that block the player from entering Sylvan village and only get rid of them once every Sylva cube and Soul is restored. 
+
+6. For Azure, its a bit different. Make the village on a raised cliff area exacally at the bottom right. Once every Azure Apex cube and Soul is restored, add some staircases around it so you can get up on to it. ONLY THOSE EXACT AREAS CAN BE USED TO GET UP TO AZURE APEX VILLAGE.  
