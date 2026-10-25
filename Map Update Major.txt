@@ -6,7 +6,7 @@ ok, the map is kinda small... as big as it is, its very small.
 
 3.  you know that sylvan village is in the top right of sylvan... not the bottom/middle right... It should also have the same flooring as Sylvan. 
 
-4. I pushed a picture of like... blue rocks, its in a Azure Apex folder in assets. use that for the flooring. 
+4. I pushed a picture of like... blue rocks, its in a Azure Apex folder in assets. use that for the flooring. i actually pushed 2 pictures, but use the one labeled 2. 
 
 5. Add some trees that block the player from entering Sylvan village and only get rid of them once every Sylva cube and Soul is restored. 
 
