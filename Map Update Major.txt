@@ -1,13 +1,13 @@
-ok, the map is kinda small... as big as it is, its very small. 
+That path, looks horrible!!! sorry XD
 
-1. make the map, 3x bigger. its a lot, but whatever.
+1. Make the path not like... 3 tiles wide. only 2. 3 IS OVERKILL!!!
 
-2.  make the bridge a stone bridge, and when you increase the size of the map, only increase the length of the bridge (the longer part (the part that goes downwards).
+2. "Most" of the trees in Sylvan thicket should be like... you can go through them (walk through them). ONLY THE ONES IN SYLVAN THICKET!!! also have it so the king isn't on top of the trees when he is behind them, so, if the king is behind the tree, make the tree overlap the king. also... some stuff is cut off, like... some trees that are by sylvan village are cut off, please dont cut them off.
 
-3.  you know that sylvan village is in the top right of sylvan... not the bottom/middle right... It should also have the same flooring as Sylvan. 
+3. I CHANGED MY MIND!!! USE THE FIRST AZURE APEX GROUND PICTURE!!! (the one labeled, 1)
 
-4. I pushed a picture of like... blue rocks, its in a Azure Apex folder in assets. use that for the flooring. i actually pushed 2 pictures, but use the one labeled 2. 
+4. the path in controlled plains shouldn't exist. it should only go 3 tiles into controlled plains. 
 
-5. Add some trees that block the player from entering Sylvan village and only get rid of them once every Sylva cube and Soul is restored. 
+5. so, you know the rocks in Controlled plains? well, they shouldn't exit either. By that, I mean the grey squares that you can walk through. This is kinda different for the objects that you CANT walk through. so, you know how there are a whole hunch in some areas clumped it? Only have 1 single object that you cant walk through per clump Its a plains not a Maze. 
 
-6. For Azure, its a bit different. Make the village on a raised cliff area exacally at the bottom right. Once every Azure Apex cube and Soul is restored, add some staircases around it so you can get up on to it. ONLY THOSE EXACT AREAS CAN BE USED TO GET UP TO AZURE APEX VILLAGE.  
+6. Make the path 35% faded. it should be noticable, but not so... what the word... bright. 
