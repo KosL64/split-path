@@ -11,6 +11,7 @@ opened directly, with no build step or module server.
 | `js/map-mechanics.js` | Movement, collision, spawning, NPC behavior, pathfinding, camera, interactions, restoration progression, world reset |
 | `js/map-rendering.js` | World, castle, village, terrain, player and NPC canvas rendering |
 | `js/map-overworld.js` | Connected exterior placement, bridge, building portals, house interiors and shared exterior camera |
+| `js/map-landmarks.js` | Terrain expansion, forest, cliff gates, stairs, paths, spring healing and mountain clouds |
 | `js/game.js` | Combat, spells, timing bonuses, upgrades, story, UI bindings and game loop |
 | `js/game-state.js` | Shared player state, configuration, combat state and geometry/canvas helpers |
 | `css/styles.css` | HTML UI styling, including battle and upgrade screens |
@@ -18,7 +19,7 @@ opened directly, with no build step or module server.
 ## Loading And Shared State
 
 `index.html` loads `game-state`, `map-data`, `map-assets`, `map-mechanics`,
-`map-rendering`, `map-overworld`, then `game`. Keep that order. Only `game.js` starts world
+`map-rendering`, `map-landmarks`, `map-overworld`, then `game`. Keep that order. Only `game.js` starts world
 initialization after all scripts have loaded. The map files define data, load
 images, and declare functions; they do not start the game loop or bind keys.
 

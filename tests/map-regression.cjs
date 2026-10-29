@@ -167,9 +167,19 @@ async function verifyOverworld(page, label) {
     const passed = [];
     const check = (value, message) => { if (!value) throw new Error(message); passed.push(message); };
     check(currentAreaId === 'castleGrounds' && gameMode === 'area', 'Castle exits directly to the overworld');
-    check(areas.sylvan.height === 39 && areas.azureApex.height === 39 && areas.controlledPlains.height === 78, 'Regional dimensions retain the agreed 39 + 39 alignment');
+    check(areas.sylvan.height === 68 && areas.azureApex.height === 68 && areas.controlledPlains.height === 136, 'Expanded regions preserve vertical alignment');
+    check(overworld.width * overworld.height / (92 * 96) > 2.95 && overworld.width * overworld.height / (92 * 96) < 3.1, 'Outdoor terrain is approximately three times the original area');
+    check(areas.castleGrounds.map.slice(22).every(row => [...row].filter(tile => tile === '=').length === 4), 'Stone bridge keeps its four-tile width throughout the nine-tile river crossing');
+    check(resolveLandscapeTile('G') === 'T' && resolveLandscapeTile('U') === 'X', 'Both villages start locked');
+    for (const [region, gate] of [['sylvan', 'G'], ['azureApex', 'U']]) {
+      const enemies = ordinaryEnemies(areas[region]);
+      enemies.slice(0, -1).forEach(enemy => { enemy.restored = true; });
+      check(!canEnterLandscapeArea(region === 'sylvan' ? 'sylvanVillage' : 'azureVillage'), `${region}: one remaining ordinary enemy keeps the village locked`);
+      restoreMapEnemy(enemies.at(-1), region);
+      check(!regionalBossStates[region].defeated && !isBlockedTile(gate), `${region}: final ordinary restoration opens access before guardian defeat`);
+    }
     const key = (x, y) => `${x},${y}`;
-    const start = [45, 9];
+    const start = [73, 13];
     const queue = [start];
     const parents = new Map([[key(...start), null]]);
     for (let i = 0; i < queue.length; i += 1) {
@@ -186,6 +196,17 @@ async function verifyOverworld(page, label) {
       }
     }
     let portals = 0;
+    for (const id of ['sylvan', 'azureApex', 'controlledPlains']) {
+      const area = areas[id];
+      for (const enemy of ordinaryEnemies(area)) {
+        const x = area.world.x + Math.floor(enemy.spawnX / config.tileSize);
+        const y = area.world.y + Math.floor(enemy.spawnY / config.tileSize);
+        if (!parents.has(key(x, y)) && !parents.has(key(x, y - 1))) throw new Error(`Unreachable controlled enemy: ${enemy.id} at ${x},${y}`);
+      }
+    }
+    check(true, 'All ordinary enemies spawn within reach of the full player hitbox');
+    check(parents.has(key(areas.azureVillage.world.x + 34, areas.azureVillage.world.y + 4)), 'Higher terrace and mountain clouds are reachable through the village');
+    check(parents.has(key(areas.azureApex.world.x + 31, areas.azureApex.world.y + 58)), 'Hot spring is reachable on foot');
     for (const id of overworld.regions) {
       const area = areas[id];
       for (const portal of area.portals || []) {
@@ -214,6 +235,7 @@ async function verifyOverworld(page, label) {
     }
     check(portals === 55, 'All 53 homes and both castles enter and exit safely');
     const walkTo = target => {
+      if (!parents.has(key(...target))) throw new Error(`No walking route to ${target}`);
       const route = [];
       for (let cell = target; cell; cell = parents.get(key(...cell))) route.unshift(cell);
       enterArea('castleGrounds');
@@ -237,29 +259,70 @@ async function verifyOverworld(page, label) {
     const sylvanResident = areas.sylvan.enemies[0];
     sylvanResident.restored = true;
     initializeVillageResident(sylvanResident);
-    const crossed = walkTo([40, 60]);
+    const crossed = walkTo([70, 104]);
     check(crossed.has('sylvan') && currentAreaId === 'azureApex', 'Walking crosses the bridge, Sylvan, and Azure without a selector');
     check(sylvanResident.relocated && sylvanResident.restored, 'Crossing a regional boundary preserves restoration and relocates the resident');
-    walkTo([8, 82]);
+    walkTo([8, 140]);
     check(currentAreaId === 'controlledPlains', 'Controlled Plains is reachable on foot beside the stacked regions');
     for (const region of ['sylvan', 'azureApex']) {
       check(ordinaryEnemies(areas[region]).every(enemy => !tileIsEmbeddedVillage(areas[region], Math.floor(enemy.spawnX / config.tileSize), Math.floor(enemy.spawnY / config.tileSize))), `${region}: controlled enemies spawn outside village grounds`);
     }
     enterArea('castleGrounds');
-    player.x = 39 * config.tileSize + (config.tileSize - player.width) / 2;
-    player.y = 12 * config.tileSize + (config.tileSize - player.height) / 2;
+    player.x = 67 * config.tileSize + (config.tileSize - player.width) / 2;
+    player.y = 21 * config.tileSize - player.height / 2;
     const y = player.y;
     for (let i = 0; i < 20; i += 1) attemptMove(0, 5);
     check(currentAreaId === 'castleGrounds' && player.y < y + config.tileSize, 'River blocks travel outside the bridge');
+    const cliff = areas.azureVillage;
+    for (let row = 0; row < cliff.height; row += 1) {
+      for (let col = 0; col < cliff.width; col += 1) {
+        if (col < 2 || col >= cliff.width - 2 || row < 2 || row >= cliff.height - 2) {
+          const tile = cliff.map[row][col];
+          if (tile !== 'U' && !isBlockedTile(tile)) throw new Error('Cliff can be climbed outside a staircase');
+        }
+      }
+    }
+    check(true, 'Azure cliff stays impassable everywhere except the designated stairs');
+    enterArea('azureApex');
+    player.x = 31 * config.tileSize;
+    player.y = 58 * config.tileSize;
+    playerState.health = 5;
+    updateWorldEnvironment();
+    environmentState.springSince = performance.now() - 1500;
+    updateWorldEnvironment();
+    check(playerState.health === 8, 'Hot spring restores health over elapsed time');
+    environmentState.springSince = performance.now() - 100000;
+    updateWorldEnvironment();
+    check(playerState.health === playerState.maxHealth, 'Hot spring healing stops at maximum health');
+    player.x = 20 * config.tileSize;
+    updateWorldEnvironment();
+    check(environmentState.springSince === null, 'Healing timer clears outside the spring');
+    enterArea('azureVillage');
+    player.x = 34 * config.tileSize;
+    player.y = 4 * config.tileSize;
+    updateWorldEnvironment();
+    environmentState.cloudSince = performance.now() - 700;
+    updateWorldEnvironment();
+    check(currentAreaId === 'azureMountain' && !collidesWithBlockedTile(player), 'Walking into the clouds enters Azure Mountain safely');
+    returnToExterior();
+    check(currentAreaId === 'azureVillage' && !collidesWithBlockedTile(player), 'Mountain exit returns safely below the clouds');
+    enterArea('sylvan');
+    player.x = 8 * config.tileSize;
+    player.y = 10 * config.tileSize;
+    check(nearbySign()?.[1] === 'W lc me to Sylvan', 'Weathered welcome sign can be read');
     resetGame();
     check(currentAreaId === 'pristineCastle' && !playerState.hasStaff && !sylvanResident.restored, 'New Game resets progression and starts inside the castle');
+    check(isBlockedTile('G') && isBlockedTile('U') && !canEnterLandscapeArea('azureMountain'), 'New Game relocks both villages and the mountain');
     return passed;
   });
   console.log(results.join('\n'));
   const scenes = [
-    ['bridge', 'castleGrounds', 41, 15], ['region-seam', 'sylvan', 4, 37],
-    ['village', 'sylvanVillage', 16, 10], ['palace-exterior', 'controlledPlains', 8, 65],
-    ['house', 'sylvanVillageHouse1', 5, 7]
+    ['bridge', 'castleGrounds', 70, 26], ['region-seam', 'sylvan', 4, 66],
+    ['village', 'sylvanVillage', 16, 10], ['palace-exterior', 'controlledPlains', 8, 109],
+    ['house', 'sylvanVillageHouse1', 5, 7], ['thicket', 'sylvan', 76, 28],
+    ['cliff', 'azureVillage', 22, 28], ['clouds', 'azureVillage', 34, 4],
+    ['spring', 'azureApex', 31, 58], ['walkway', 'controlledPlains', 54, 28],
+    ['sign', 'sylvan', 8, 11], ['mountain', 'azureMountain', 5, 23]
   ];
   for (const [name, id, x, y] of scenes) {
     await page.evaluate(({ id, x, y }) => {
@@ -288,8 +351,16 @@ async function verifyOverworld(page, label) {
     await page.screenshot({ path: path.join(os.tmpdir(), `split-path-overworld-${name}-${label}.png`) });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${label}: no horizontal overflow`);
   }
+  await page.evaluate(() => {
+    ordinaryEnemies(areas.azureApex).forEach(enemy => { enemy.restored = true; });
+    enterArea('azureVillage');
+    player.x = 22 * config.tileSize; player.y = 28 * config.tileSize;
+    updateCamera(); drawWorld();
+  });
+  await page.screenshot({ path: path.join(os.tmpdir(), `split-path-overworld-stairs-open-${label}.png`) });
+  await page.evaluate(() => { enterArea('azureMountain'); });
   await page.keyboard.press('m');
-  assert.equal(await page.evaluate(() => currentAreaId), 'sylvanVillageHouse1', 'M no longer bypasses doors');
+  assert.equal(await page.evaluate(() => currentAreaId), 'azureMountain', 'M no longer bypasses doors');
   assert.deepEqual(errors, [], 'No overworld runtime errors');
   console.log(`${label}: connected overworld screenshots and canvas pixels verified.`);
 }

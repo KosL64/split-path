@@ -1,30 +1,32 @@
 // Connected exterior coordinates are in tiles; actors retain their area's local coordinates.
 const overworld = {
-  width: 92,
-  height: 96,
+  width: 160,
+  height: 167,
   cameraX: 0,
   cameraY: 0,
   regions: ["castleGrounds", "controlledPlains", "sylvan", "azureApex", "sylvanVillage", "azureVillage"]
 };
 
 function initializeOverworld() {
-  const grounds = createAreaGrid(92, 18, "^", "^");
-  fillRectTiles(grounds, 1, 13, 90, 5, "W");
-  fillRectTiles(grounds, 40, 13, 4, 5, "=");
-  fillRectTiles(grounds, 43, 4, 6, 5, "F");
-  grounds[9][45] = "d";
-  setTiles(grounds, [[8, 5], [16, 8], [29, 4], [62, 5], [73, 7], [83, 4]], "T");
+  prepareExpandedRegions();
+  const grounds = createAreaGrid(160, 31, "^", "^");
+  fillRectTiles(grounds, 1, 22, 158, 9, "W");
+  fillRectTiles(grounds, 68, 22, 4, 9, "=");
+  paintLandscapePath(grounds, [[73, 14], [70, 18], [70, 20]]);
+  fillRectTiles(grounds, 71, 8, 6, 5, "F");
+  grounds[13][73] = "d";
+  setTiles(grounds, [[12, 8], [29, 11], [48, 6], [107, 8], [128, 12], [144, 6]], "T");
   areas.castleGrounds = {
-    name: "Pristine Castle Grounds", width: 92, height: 18, start: { x: 45, y: 10 },
+    name: "Pristine Castle Grounds", width: 160, height: 31, start: { x: 73, y: 14 },
     cameraX: 0, cameraY: 0, healed: true, enemies: [], map: finishAreaGrid(grounds),
     world: { x: 0, y: 0 }, layer: 1,
-    portals: [{ x: 45, y: 9, target: "pristineCastle", label: "Pristine Castle" }],
-    landmark: { x: 43, y: 4, width: 6, height: 5, name: "Pristine Castle" }
+    portals: [{ x: 73, y: 13, target: "pristineCastle", label: "Pristine Castle" }],
+    landmark: { x: 71, y: 8, width: 6, height: 5, name: "Pristine Castle" }
   };
   const placements = {
-    controlledPlains: { x: 0, y: 18 }, sylvan: { x: 38, y: 18 }, azureApex: { x: 38, y: 57 },
-    sylvanVillage: { x: 58, y: 36, parent: "sylvan" },
-    azureVillage: { x: 54, y: 74, parent: "azureApex" }
+    controlledPlains: { x: 0, y: 31 }, sylvan: { x: 66, y: 31 }, azureApex: { x: 66, y: 99 },
+    sylvanVillage: { x: 124, y: 37, parent: "sylvan" },
+    azureVillage: { x: 112, y: 133, parent: "azureApex" }
   };
   Object.entries(placements).forEach(([id, placement]) => {
     const area = areas[id];
@@ -38,27 +40,27 @@ function initializeOverworld() {
         && ["^", "T", "R"].includes(tile)) row[x] = ".";
     }));
     if (id === "sylvan") {
-      fillRectTiles(grid, 0, 2, 2, 37, ".");
-      fillRectTiles(grid, 0, 37, 52, 2, ".");
+      fillRectTiles(grid, 0, 2, 2, area.height - 2, ".");
+      fillRectTiles(grid, 0, area.height - 2, area.width - 2, 2, ".");
       fillRectTiles(grid, 2, 0, 4, 2, ".");
     }
     if (id === "azureApex") {
-      fillRectTiles(grid, 0, 0, 52, 2, ".");
-      fillRectTiles(grid, 0, 0, 2, 37, ".");
+      fillRectTiles(grid, 0, 0, area.width - 2, 2, ".");
+      fillRectTiles(grid, 0, 0, 2, area.height - 2, ".");
     }
     if (id === "controlledPlains") {
-      fillRectTiles(grid, 36, 2, 2, 74, ".");
-      fillRectTiles(grid, 6, 60, 5, 4, "F");
-      grid[64][8] = "d";
-      area.portals.push({ x: 8, y: 64, target: "controlledPalace", label: "Controlled Palace" });
-      area.landmark = { x: 6, y: 60, width: 5, height: 4, name: "Controlled Palace" };
+      fillRectTiles(grid, area.width - 2, 2, 2, area.height - 4, ".");
+      fillRectTiles(grid, 6, 104, 5, 4, "F");
+      grid[108][8] = "d";
+      area.portals.push({ x: 8, y: 108, target: "controlledPalace", label: "Controlled Palace" });
+      area.landmark = { x: 6, y: 104, width: 5, height: 4, name: "Controlled Palace" };
     }
     area.map = finishAreaGrid(grid);
   });
   areas.pristineCastle.layer = 2;
-  areas.pristineCastle.exteriorDoor = { areaId: "castleGrounds", x: 45, y: 9 };
+  areas.pristineCastle.exteriorDoor = { areaId: "castleGrounds", x: 73, y: 13 };
   areas.controlledPalace.layer = 2;
-  areas.controlledPalace.exteriorDoor = { areaId: "controlledPlains", x: 8, y: 64 };
+  areas.controlledPalace.exteriorDoor = { areaId: "controlledPlains", x: 8, y: 108 };
   areas.palaceUpper.layer = 3;
   ["sylvanVillage", "azureVillage"].forEach(id => {
     const village = areas[id];
@@ -80,6 +82,8 @@ function initializeOverworld() {
     });
     village.map = finishAreaGrid(exteriorGrid);
   });
+  buildLandscapeFeatures();
+  initializeLandscapeReachability();
 }
 
 function worldAreaAt(tileX, tileY) {
@@ -92,7 +96,7 @@ function worldAreaAt(tileX, tileY) {
 
 function worldTileAt(tileX, tileY) {
   const area = areas[worldAreaAt(tileX, tileY)];
-  return area?.map[tileY - area.world.y]?.[tileX - area.world.x];
+  return resolveLandscapeTile(area?.map[tileY - area.world.y]?.[tileX - area.world.x]);
 }
 
 function tileIsEmbeddedVillage(area, x, y) {
@@ -148,14 +152,14 @@ function nearbyWorldPortal() {
 
 function enterWorldPortal() {
   const portal = nearbyWorldPortal();
-  if (!portal) return;
+  if (!portal || !canEnterLandscapeArea(portal.target)) return;
   finishAreaDeparture();
   enterArea(portal.target);
 }
 
 function returnToExterior() {
   const door = areas[currentAreaId].exteriorDoor;
-  if (!door || (currentAreaId === "pristineCastle" && !castleState.exitCleared)) return;
+  if (!door || !canEnterLandscapeArea(door.areaId) || (currentAreaId === "pristineCastle" && !castleState.exitCleared)) return;
   finishAreaDeparture();
   enterArea(door.areaId);
   player.x = door.x * config.tileSize + (config.tileSize - player.width) / 2;
@@ -181,7 +185,7 @@ function drawOverworld() {
     drawExteriorLandmark(area, cameraX, cameraY);
     ctx.restore();
   });
-  drawMapLabel(active.name, active.world.parent ? "Village" : currentAreaId === "castleGrounds" ? "Pristine Bridge | Pristine River" : "");
+  drawMapLabel(landscapeLocationName(), active.world.parent ? "Village" : currentAreaId === "castleGrounds" ? "Pristine Bridge | Pristine River" : "");
 }
 
 function drawExteriorLandmark(area, cameraX, cameraY) {

@@ -4,6 +4,7 @@ function drawWorld() {
   if (areas[currentAreaId].world) drawOverworld();
   else drawAreaMap();
   drawPlayer();
+  drawWorldAtmosphere();
 }
 
 function drawAreaMap(areaId = currentAreaId, cameraX = areas[areaId].cameraX, cameraY = areas[areaId].cameraY, label = true) {
@@ -18,13 +19,16 @@ function drawAreaMap(areaId = currentAreaId, cameraX = areas[areaId].cameraX, ca
   const startRow = Math.floor(cameraY / config.tileSize);
   const endRow = Math.ceil((cameraY + canvas.height) / config.tileSize);
 
-  if (areaId === "sylvan" && sylvanGrassPattern) {
+  const groundPattern = ["sylvan", "sylvanVillage"].includes(areaId) ? sylvanGrassPattern
+    : ["azureApex", "azureVillage", "azureMountain"].includes(areaId) ? azureGroundPattern : null;
+  if (groundPattern) {
     ctx.save();
     ctx.translate(-cameraX, -cameraY);
-    ctx.fillStyle = sylvanGrassPattern;
+    ctx.fillStyle = groundPattern;
     ctx.fillRect(cameraX, cameraY, canvas.width, canvas.height);
     ctx.restore();
-    ctx.fillStyle = area.healed ? "rgba(0,0,0,.04)" : "rgba(0,0,0,.18)";
+    const groundHealed = areaId === "sylvanVillage" ? areas.sylvan.healed : areaId === "azureVillage" ? areas.azureApex.healed : area.healed;
+    ctx.fillStyle = groundHealed ? "rgba(0,0,0,.04)" : "rgba(0,0,0,.18)";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
 
@@ -57,6 +61,7 @@ function drawAreaMap(areaId = currentAreaId, cameraX = areas[areaId].cameraX, ca
 }
 
 function areaPalette(areaId) {
+  if (areaId === "azureMountain") areaId = "azureApex";
   if (areaId === "castleGrounds") areaId = "sylvanVillage";
   if (areas[areaId]?.houseInterior) areaId = areas[areaId].villageTheme;
   const palettes = {
@@ -132,6 +137,7 @@ function areaPalette(areaId) {
 
 function drawTile(tile, x, y, healed, areaId) {
   if (!tile) return;
+  tile = resolveLandscapeTile(tile);
   const size = config.tileSize;
   const palette = areaPalette(areaId);
   if (areas[areaId]?.houseInterior) {
@@ -144,7 +150,8 @@ function drawTile(tile, x, y, healed, areaId) {
       return;
     }
   }
-  const grassy = areaId === "sylvan" && sylvanGrassPattern;
+  const grassy = (["sylvan", "sylvanVillage"].includes(areaId) && sylvanGrassPattern)
+    || (["azureApex", "azureVillage", "azureMountain"].includes(areaId) && azureGroundPattern);
   ctx.fillStyle = healed ? palette.healedFloor : palette.floor;
   if (!grassy) ctx.fillRect(x, y, size, size);
 
@@ -168,7 +175,7 @@ function drawTile(tile, x, y, healed, areaId) {
   if (tile === "T") {
     ctx.fillStyle = healed ? palette.tree : palette.wall;
     if (!grassy) ctx.fillRect(x, y, size, size);
-    if (areaId === "sylvan" && readySylvanSprite("tree")) {
+    if (["sylvan", "sylvanVillage"].includes(areaId) && readySylvanSprite("tree")) {
       ctx.drawImage(sylvanSprites.tree, x - 13, y - 60, size + 26, size + 60);
     } else {
       drawTree(x + 8, y + 2, areaId === "sylvanVillage" ? 0.95 : 0.72, palette.tree);
@@ -203,17 +210,21 @@ function drawTile(tile, x, y, healed, areaId) {
   }
 
   if (tile === "=") {
-    ctx.fillStyle = "#86633c";
+    ctx.fillStyle = "#a4adb1";
     ctx.fillRect(x, y, size, size);
-    ctx.strokeStyle = "#473b2a";
+    ctx.strokeStyle = "#586975";
     ctx.lineWidth = 2;
-    for (let row = 0; row < size; row += 12) {
+    for (let row = 0; row < size; row += 16) {
       ctx.beginPath();
       ctx.moveTo(x, y + row);
       ctx.lineTo(x + size, y + row);
       ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x + (row % 32 ? 12 : 32), y + row);
+      ctx.lineTo(x + (row % 32 ? 12 : 32), y + row + 16); ctx.stroke();
     }
   }
+
+  drawLandscapeTile(tile, x, y);
 
   if (tile === "h") drawVillageHouse(x, y, palette);
 

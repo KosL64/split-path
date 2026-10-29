@@ -52,6 +52,8 @@ function restoreMapEnemy(enemy, areaId) {
 }
 
 function resetMapState() {
+  environmentState.springSince = null;
+  environmentState.cloudSince = null;
   Object.assign(castleState, {
     exitCleared: false,
     sitting: false,
@@ -344,7 +346,7 @@ function collectEnemySpawnTiles(area) {
   area.map.forEach((row, y) => {
     [...row].forEach((tile, x) => {
       const distanceFromStart = Math.hypot(x - area.start.x, y - area.start.y);
-      if (distanceFromStart < 4 || tile === "E" || tile === "d" || isBlockedTile(tile) || tileIsEmbeddedVillage(area, x, y)) return;
+      if (distanceFromStart < 4 || tile === "E" || tile === "d" || isBlockedTile(tile) || tileIsEmbeddedVillage(area, x, y) || !landscapeSpawnReachable(area, x, y)) return;
       if (tile === "C" || tile === "g") preferred.push({ x, y, tile });
       else if (tile === ".") fallback.push({ x, y, tile });
     });
@@ -438,6 +440,7 @@ function movePlayer() {
   const baseSpeed = config.areaMoveSpeed;
   const speed = isSprinting() ? baseSpeed * config.sprintMultiplier : baseSpeed;
   attemptMove(horizontal * speed, vertical * speed);
+  updateWorldEnvironment();
 }
 
 function isSprinting() {
@@ -665,7 +668,7 @@ function findEnemyRoute(enemy, goal, targetEntity = player) {
     const tile = queue[cursor];
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
       const next = { x: tile.x + dx, y: tile.y + dy };
-      if (parents.has(key(next)) || isBlockedTile(area.map[next.y]?.[next.x])) continue;
+      if (parents.has(key(next)) || isBlockedTile(area.map[next.y]?.[next.x]) || (!enemy.restored && !landscapeSpawnReachable(area, next.x, next.y))) continue;
       parents.set(key(next), tile);
       queue.push(next);
     }
@@ -718,6 +721,9 @@ function chooseEnemyDirection(enemy) {
 
 function collidesWithBlockedTile(rect) {
   const area = areas[currentAreaId];
+  if (rect.id && !rect.restored && !landscapeSpawnReachable(area,
+    Math.floor((rect.x + rect.width / 2) / config.tileSize),
+    Math.floor((rect.y + rect.height / 2) / config.tileSize))) return true;
   if (area.world && !rect.id) return worldRectBlocked({ ...rect,
     x: rect.x + area.world.x * config.tileSize, y: rect.y + area.world.y * config.tileSize });
   if (rect.id && tileIsEmbeddedVillage(area,
@@ -738,7 +744,8 @@ function collidesWithBlockedTile(rect) {
 }
 
 function isBlockedTile(tile) {
-  return !tile || tile === "^" || tile === "T" || tile === "W" || tile === "H" || tile === "K" || tile === "V" || tile === "h" || tile === "L" || tile === "F" || tile === "b" || tile === "t" || (tile === "B" && !castleState.exitCleared);
+  tile = resolveLandscapeTile(tile);
+  return !tile || tile === "^" || tile === "T" || tile === "W" || tile === "X" || tile === "Y" || tile === "H" || tile === "K" || tile === "V" || tile === "h" || tile === "L" || tile === "F" || tile === "b" || tile === "t" || (tile === "B" && !castleState.exitCleared);
 }
 
 function updateCamera() {
@@ -959,10 +966,11 @@ function nearbyVillageHouseDoor() {
 
 function nearbySign() {
   const area = areas[currentAreaId];
-  if (!area.signs) return null;
+  const signs = area.signs || area.landmarkSigns;
+  if (!signs) return null;
   const playerCol = Math.floor((player.x + player.width / 2) / config.tileSize);
   const playerRow = Math.floor((player.y + player.height / 2) / config.tileSize);
-  return Object.entries(area.signs).find(([position]) => {
+  return Object.entries(signs).find(([position]) => {
     const [x, y] = position.split(",").map(Number);
     return Math.abs(x - playerCol) <= 1 && Math.abs(y - playerRow) <= 1;
   }) || null;

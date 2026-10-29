@@ -12,6 +12,16 @@ sylvanGrass.onload = () => {
   sylvanGrassPattern = ctx.createPattern(tile, "repeat");
 };
 sylvanGrass.src = "img/assets/sylvan/grass.jpg";
+let azureGroundPattern = null;
+const azureGround = new Image();
+azureGround.onload = () => {
+  const tile = document.createElement("canvas");
+  tile.width = 192;
+  tile.height = 128;
+  tile.getContext("2d").drawImage(azureGround, 0, 0, tile.width, tile.height);
+  azureGroundPattern = ctx.createPattern(tile, "repeat");
+};
+azureGround.src = "img/assets/Azure Apex/Azure Apex background 2.jpg";
 const restoredSylvanSprites = Object.fromEntries(
   ["ground", "flying"].map((name) => {
     const image = new Image();
