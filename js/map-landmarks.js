@@ -1,5 +1,6 @@
 // Outdoor expansion and progression features; combat remains in game.js.
 const landscape = {
+  pathOpacity: 0.65,
   sylvan: { width: 94, height: 68 }, plains: { width: 66, height: 136 },
   groundsHeight: 31, riverY: 22, bridgeX: 68, bridgeWidth: 4,
   sylvanVillage: { x: 58, y: 6 }, azureVillage: { x: 46, y: 34 },
@@ -102,21 +103,60 @@ function resolveLandscapeTile(tile) {
 }
 
 function paintLandscapePath(grid, points, tile = "p", excluded = null) {
+  const paint = (x, y) => {
+    for (let dy = -1; dy <= 0; dy += 1) {
+      for (let dx = -1; dx <= 0; dx += 1) {
+        const col = x + dx, row = y + dy;
+        if (!grid[row]?.[col] || col < 1 || row < 1 || col >= grid[0].length - 1 || row >= grid.length - 1) continue;
+        if (excluded && col >= excluded.x && col < excluded.x + excluded.width && row >= excluded.y && row < excluded.y + excluded.height) continue;
+        grid[row][col] = tile;
+      }
+    }
+  };
   for (let index = 1; index < points.length; index += 1) {
     const [ax, ay] = points[index - 1];
     const [bx, by] = points[index];
-    const steps = Math.max(Math.abs(bx - ax), Math.abs(by - ay));
-    for (let step = 0; step <= steps; step += 1) {
-      const x = Math.round(ax + (bx - ax) * step / Math.max(1, steps));
-      const y = Math.round(ay + (by - ay) * step / Math.max(1, steps));
-      for (let dy = -1; dy <= 1; dy += 1) {
-        for (let dx = -1; dx <= 1; dx += 1) {
-          const col = x + dx, row = y + dy;
-          if (!grid[row]?.[col] || col < 1 || row < 1 || col >= grid[0].length - 1 || row >= grid.length - 1) continue;
-          if (excluded && col >= excluded.x && col < excluded.x + excluded.width && row >= excluded.y && row < excluded.y + excluded.height) continue;
-          grid[row][col] = tile;
+    let x = ax, y = ay;
+    paint(x, y);
+    // Square turns keep each road leg exactly two tiles wide.
+    const horizontalFirst = Math.abs(bx - ax) >= Math.abs(by - ay);
+    for (const axis of horizontalFirst ? ["x", "y"] : ["y", "x"]) {
+      while ((axis === "x" ? x !== bx : y !== by)) {
+        if (axis === "x") x += Math.sign(bx - x);
+        else y += Math.sign(by - y);
+        paint(x, y);
+      }
+    }
+  }
+}
+
+function thinPlainsObstacles(grid) {
+  const visited = new Set();
+  const key = (x, y) => `${x},${y}`;
+  grid.forEach(row => row.forEach((tile, x) => { if (tile === "R") row[x] = "."; }));
+  for (let y = 1; y < grid.length - 1; y += 1) {
+    for (let x = 1; x < grid[0].length - 1; x += 1) {
+      if (visited.has(key(x, y)) || !["T", "W"].includes(grid[y][x])) continue;
+      const group = [[x, y, grid[y][x]]];
+      visited.add(key(x, y));
+      for (let i = 0; i < group.length; i += 1) {
+        const [cx, cy] = group[i];
+        for (let dy = -1; dy <= 1; dy += 1) {
+          for (let dx = -1; dx <= 1; dx += 1) {
+            const nx = cx + dx, ny = cy + dy;
+            if (nx < 1 || ny < 1 || nx >= grid[0].length - 1 || ny >= grid.length - 1
+              || visited.has(key(nx, ny)) || !["T", "W"].includes(grid[ny][nx])) continue;
+            visited.add(key(nx, ny));
+            group.push([nx, ny, grid[ny][nx]]);
+          }
         }
       }
+      const centerX = group.reduce((sum, cell) => sum + cell[0], 0) / group.length;
+      const centerY = group.reduce((sum, cell) => sum + cell[1], 0) / group.length;
+      const representative = group.reduce((nearest, cell) =>
+        Math.hypot(cell[0] - centerX, cell[1] - centerY) < Math.hypot(nearest[0] - centerX, nearest[1] - centerY) ? cell : nearest);
+      group.forEach(([gx, gy]) => { grid[gy][gx] = "."; });
+      grid[representative[1]][representative[0]] = representative[2];
     }
   }
 }
@@ -126,13 +166,16 @@ function buildLandscapeFeatures() {
   const forest = landscape.thicket;
   for (let y = forest.y; y < forest.y + forest.height; y += 1) {
     for (let x = forest.x; x < forest.x + forest.width; x += 1) {
-      if ((x * 7 + y * 11) % 5 < 3) sylvan[y][x] = "T";
+      if ((x * 7 + y * 11) % 5 < 3 || sylvan[y][x] === "T") {
+        sylvan[y][x] = (x * 13 + y * 3) % 7 === 0 ? "T" : "f";
+      }
     }
   }
   const sv = { ...landscape.sylvanVillage, width: areas.sylvanVillage.width, height: areas.sylvanVillage.height };
   paintLandscapePath(sylvan, [[4, 2], [4, 20], [22, 26], [26, 58], [38, 66]]);
   paintLandscapePath(sylvan, [[4, 20], [45, 20], [45, 36], [76, 36], [76, 24]], "p", sv);
   paintLandscapePath(sylvan, [[4, 20], [1, 20]]);
+  fillRectTiles(sylvan, 0, 19, 2, 2, "p");
   sylvan[10][8] = "s";
   areas.sylvan.landmarkSigns = { "8,10": "W lc me to Sylvan" };
   areas.sylvan.map = finishAreaGrid(sylvan);
@@ -149,9 +192,8 @@ function buildLandscapeFeatures() {
   areas.azureApex.map = finishAreaGrid(azure);
 
   const plains = areas.controlledPlains.map.map(row => [...row]);
-  paintLandscapePath(plains, [[64, 20], [54, 28], [34, 60], [8, 108]]);
-  fillRectTiles(plains, 52, 25, 5, 10, "j");
-  fillRectTiles(plains, 53, 29, 3, 2, ".");
+  thinPlainsObstacles(plains);
+  fillRectTiles(plains, plains[0].length - 3, 19, 3, 2, "p");
   fillRectTiles(plains, 6, 104, 5, 4, "F");
   plains[108][8] = "d";
   areas.controlledPlains.map = finishAreaGrid(plains);
@@ -234,11 +276,6 @@ function drawLandscapeTile(tile, x, y) {
     ctx.fillStyle = "#b9c4cb"; ctx.fillRect(x, y, size, size);
     ctx.fillStyle = "#657384";
     for (let i = 7; i < size; i += 9) ctx.fillRect(x, y + i, size, 3);
-  }
-  if (tile === "p") {
-    ctx.fillStyle = "#b3ad79"; ctx.fillRect(x, y, size, size);
-    ctx.fillStyle = "#888b6f";
-    ctx.fillRect(x + 9, y + 8, 12, 7); ctx.fillRect(x + 30, y + 29, 10, 6);
   }
   if (tile === "j") {
     ctx.fillStyle = "#392440"; ctx.fillRect(x, y, size, size);

@@ -37,13 +37,18 @@ new higher terrace. Sylvan gains two rows of clearance below its houses.
 
 `js/map-landmarks.js` owns expansion, paths, progression tiles and environmental
 effects. The ground art comes from Luciano's existing Sylvan sprites and
-`img/assets/Azure Apex/Azure Apex background 2.jpg`. Sylvan Village shares
+`img/assets/Azure Apex/Azure-Apex_Background.jpg` (Luciano's first ground picture). Sylvan Village shares
 Sylvan's ground texture. The green welcome sign reads `W lc me to Sylvan` and
 can be inspected with the normal sign interaction.
 
 Sylvan Thicket is a large forest around the village, with a path to its southern
 entrance. The village's two-tile tree boundary has a four-tile gate that clears
 only when every ordinary Sylvan cube and soul is restored.
+Most trees inside the thicket use the passable `f` tile; a minority remain solid.
+Ordinary trees outside the thicket and the village entrance barriers stay solid.
+Exterior trees and actors are sorted by their ground-contact depth, so a canopy
+can cover the King when he is behind a tree. Trees render after all region
+floors, without clipping at village/chunk edges; HUD labels remain on top.
 
 Azure Village has an impassable cliff boundary. Four-tile stair entrances on its
 west and south sides appear only when every ordinary Azure enemy is restored.
@@ -58,8 +63,17 @@ clouds to avoid an immediate re-entry. Azure Mountain is currently an explorable
 
 The Azure Hot Spring restores one health every 500 ms while standing in its
 enterable water, capped at maximum health. Leaving the water clears the timer.
-Paths follow the annotated drawing and reach the settlements, spring and palace.
-The cracked purple Controlled Walkway is traversable scenery, not a repair quest.
+Paths use two-tile-wide square turns and `img/assets/Pathway.png` at 65% opacity
+(35% faded). Only the painted stones are sampled from the reference image;
+multiply blending lets its white background blend into the ground. The original
+asset is preserved. Routes reach the settlements and spring; the Controlled
+Plains branch now stops exactly three tiles past the regional border. The former
+long interior path and purple walkway have been removed as superseded by
+Luciano's structure update part 2.
+
+Controlled Plains contains no pass-through grey rock-square tiles. Each connected
+clump of blocking trees/water is reduced to one representative obstacle. Palace
+buildings and the outer world boundary remain intact.
 
 ## Layers And Doors
 
@@ -100,7 +114,9 @@ all 55 exterior entrances and return points after unlocking, full-hitbox route r
 walking across the bridge and region seams, river collision, restoration and
 reset. Desktop and mobile screenshots plus nonblank canvas checks include the
 bridge, a three-region junction, villages, the palace entrance, a home, the thicket,
-cliff, opened stairs, clouds, hot spring, walkway, sign and mountain. Village locks,
+cliff, opened stairs, clouds, hot spring, open Plains, village-edge trees, sign and mountain. Village locks,
 guardian-independent unlocks, cliff boundaries, healing, cloud transitions and
-reset are included.
+reset are included. Refinement checks cover two-tile roads, the three-tile Plains
+stub, sparse obstacles, pass-through tree scope, physical tree traversal and
+front/behind canopy ordering.
 Screenshots are written to the OS temporary folder as `split-path-overworld-*`.

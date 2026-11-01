@@ -157,6 +157,7 @@ async function inspect(page, url) {
 async function verifyOverworld(page, label) {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
+  await page.waitForFunction(() => !!pathwayPattern && !!azureGroundPattern && pathwayTexture.complete && sylvanSprites.tree.complete);
   const results = await page.evaluate(() => {
     cancelAnimationFrame(animationFrameId);
     resetGame();
@@ -166,6 +167,64 @@ async function verifyOverworld(page, label) {
     returnToExterior();
     const passed = [];
     const check = (value, message) => { if (!value) throw new Error(message); passed.push(message); };
+    const sample = createAreaGrid(24, 24, '^', '^');
+    paintLandscapePath(sample, [[8, 3], [8, 18], [18, 18]]);
+    check(sample[10].filter(tile => tile === 'p').length === 2
+      && sample.filter(row => row[14] === 'p').length === 2, 'Straight path legs remain exactly two tiles wide through turns');
+    check(landscape.pathOpacity === 0.65 && decodeURIComponent(pathwayTexture.src).endsWith('/Pathway.png'), 'Roads use Luciano pathway texture at 35 percent fade');
+    check(decodeURIComponent(azureGround.src).endsWith('/Azure-Apex_Background.jpg'), 'Azure uses the first ground picture');
+    let passableTrees = 0, solidTrees = 0, walkThrough = null;
+    const t = landscape.thicket;
+    areas.sylvan.map.forEach((row, y) => [...row].forEach((tile, x) => {
+      if (tile === 'f') {
+        if (x < t.x || x >= t.x + t.width || y < t.y || y >= t.y + t.height) throw new Error('Pass-through tree outside Sylvan Thicket');
+        passableTrees += 1;
+        const rect = { x: (areas.sylvan.world.x + x) * config.tileSize + 2,
+          y: (areas.sylvan.world.y + y + 1) * config.tileSize - player.height / 2,
+          width: player.width, height: player.height };
+        if (!walkThrough && !worldRectBlocked(rect) && !worldRectBlocked({ ...rect, x: rect.x + 4 })) walkThrough = { x, y };
+      }
+      if (tile === 'T' && x >= t.x && x < t.x + t.width && y >= t.y && y < t.y + t.height) solidTrees += 1;
+    }));
+    check(passableTrees > solidTrees * 3 && !isBlockedTile('f') && isBlockedTile('T') && isBlockedTile('G'), 'Most thicket trees are passable; ordinary trees and locked entrance barriers stay solid');
+    check(Object.entries(areas).every(([id, area]) => id === 'sylvan' || area.map.every(row => !row.includes('f'))), 'Pass-through trees exist only in Sylvan Thicket');
+    if (!walkThrough) throw new Error('No full-hitbox pass-through tree found');
+    enterArea('sylvan');
+    player.x = walkThrough.x * config.tileSize + 2;
+    player.y = (walkThrough.y + 1) * config.tileSize - player.height / 2;
+    const previousX = player.x;
+    attemptMove(4, 0);
+    check(player.x === previousX + 4 && !collidesWithBlockedTile(player), 'King can physically walk through a thicket tree');
+    const treeFoot = (walkThrough.y + 1) * config.tileSize;
+    for (const behind of [true, false]) {
+      player.y = treeFoot - player.height + (behind ? -8 : 8);
+      updateCamera();
+      const items = collectOverworldDrawables();
+      const treeIndex = items.findIndex(item => item.kind === 'tree' && item.areaId === 'sylvan' && item.col === walkThrough.x && item.row === walkThrough.y);
+      const playerIndex = items.findIndex(item => item.kind === 'player');
+      check(treeIndex >= 0 && (behind ? playerIndex < treeIndex : treeIndex < playerIndex), behind
+        ? 'Canopy draws over the king when he is behind its trunk'
+        : 'King draws in front when he is below the trunk');
+    }
+    enterArea('castleGrounds');
+    const plains = areas.controlledPlains;
+    check(plains.map.every(row => !row.includes('R') && !row.includes('j')), 'Plains have no grey rock squares or old interior walkway');
+    let pathTiles = 0;
+    plains.map.forEach((row, y) => [...row].forEach((tile, x) => {
+      if (tile === 'p') {
+        if (x < plains.width - 3 || ![19, 20].includes(y)) throw new Error('Path extends farther than three Plains tiles');
+        pathTiles += 1;
+      }
+      if (['T', 'W'].includes(tile)) {
+        for (let dy = -1; dy <= 1; dy += 1) {
+          for (let dx = -1; dx <= 1; dx += 1) {
+            if ((dx || dy) && ['T', 'W'].includes(plains.map[y + dy]?.[x + dx])) throw new Error('Plains blocking obstacles still form a clump');
+          }
+        }
+      }
+    }));
+    check(pathTiles === 6 && plains.map[104].includes('F'), 'Plains road is exactly three tiles deep and two wide; palace stays intact');
+    check(true, 'Each Plains obstacle clump leaves only one blocking object');
     check(currentAreaId === 'castleGrounds' && gameMode === 'area', 'Castle exits directly to the overworld');
     check(areas.sylvan.height === 68 && areas.azureApex.height === 68 && areas.controlledPlains.height === 136, 'Expanded regions preserve vertical alignment');
     check(overworld.width * overworld.height / (92 * 96) > 2.95 && overworld.width * overworld.height / (92 * 96) < 3.1, 'Outdoor terrain is approximately three times the original area');
@@ -322,7 +381,7 @@ async function verifyOverworld(page, label) {
     ['house', 'sylvanVillageHouse1', 5, 7], ['thicket', 'sylvan', 76, 28],
     ['cliff', 'azureVillage', 22, 28], ['clouds', 'azureVillage', 34, 4],
     ['spring', 'azureApex', 31, 58], ['walkway', 'controlledPlains', 54, 28],
-    ['sign', 'sylvan', 8, 11], ['mountain', 'azureMountain', 5, 23]
+    ['sign', 'sylvan', 8, 11], ['village-edge', 'sylvanVillage', 2, 4], ['mountain', 'azureMountain', 5, 23]
   ];
   for (const [name, id, x, y] of scenes) {
     await page.evaluate(({ id, x, y }) => {

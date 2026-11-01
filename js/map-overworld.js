@@ -12,7 +12,7 @@ function initializeOverworld() {
   const grounds = createAreaGrid(160, 31, "^", "^");
   fillRectTiles(grounds, 1, 22, 158, 9, "W");
   fillRectTiles(grounds, 68, 22, 4, 9, "=");
-  paintLandscapePath(grounds, [[73, 14], [70, 18], [70, 20]]);
+  paintLandscapePath(grounds, [[73, 14], [70, 18], [70, 21]]);
   fillRectTiles(grounds, 71, 8, 6, 5, "F");
   grounds[13][73] = "d";
   setTiles(grounds, [[12, 8], [29, 11], [48, 6], [107, 8], [128, 12], [144, 6]], "T");
@@ -169,7 +169,6 @@ function returnToExterior() {
 
 function drawOverworld() {
   const size = config.tileSize;
-  const active = areas[currentAreaId];
   ctx.fillStyle = "#18271f";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   overworld.regions.forEach(id => {
@@ -181,11 +180,10 @@ function drawOverworld() {
     ctx.beginPath();
     ctx.rect(-cameraX, -cameraY, area.width * size, area.height * size);
     ctx.clip();
-    drawAreaMap(id, cameraX, cameraY, false);
+    drawAreaMap(id, cameraX, cameraY, false, false);
     drawExteriorLandmark(area, cameraX, cameraY);
     ctx.restore();
   });
-  drawMapLabel(landscapeLocationName(), active.world.parent ? "Village" : currentAreaId === "castleGrounds" ? "Pristine Bridge | Pristine River" : "");
 }
 
 function drawExteriorLandmark(area, cameraX, cameraY) {
