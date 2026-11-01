@@ -1,0 +1,7 @@
+Title screen update!!! 
+
+1. so, i pushed a image a bit ago called Split-Path_Cover_Art. when you first enter the game, there is that like... it says phase 1 prototyle SPLIT PATH! relace the left side of the screen with the Cover art.
+
+2. Make the dagger test mode like... when you activate it, it says its enabled. REMOVE THAT TEXT!!! thank you ;) The player shouldn't know that they are in a test mode. i do wanna keep that for a bit though.
+
+3. change the epilogue. get rid of the pictures entirely. they do not make sense, and i know the whole universe and lore XD. so... instead... make the first page say, "Once upon a time, the Pristine king ruled over the pristine kingdom." Second page: "But one day, a shadow appeared, killed the king, and took his place." 3rd page: "Every cube fell under control accept for one" 4th page: "that cube, was the king. reborn as a cube, and drained of his power." last page: "by restoring cubes, the king can regain there power." 
