@@ -4,7 +4,7 @@
 
 - The palace ground floor has three regional guardians. Kyle is upstairs with
   his existing 1000 health. Use Z on either staircase to travel between floors.
-- Palace guardians can be challenged immediately. A guardian also appears in
+- Palace guardians start battle on contact. A guardian also appears in
   its home region when all ordinary enemies there have been restored.
 - Both appearances share one defeat state. Winning at either location removes
   both and releases the region's restored inhabitants exactly once.
@@ -17,19 +17,25 @@
 - Wither triggers every five attack hits: 15% maximum Control against ordinary
   enemies and 5% against guardians and Kyle.
 
-## Initial Guardian Tuning
+## Guardian Pursuit And Stats
 
-Tune `regionalBossDefinitions` in `js/map-data.js`. Names and stats are initial
-defaults for classroom playtesting, not values supplied by Luciano.
+Guardians spot the King anywhere on an unobstructed row or column in their
+area. Once pursuing, they track him in any direction while visible, moving 20%
+faster than his sprint. Trees, including walk-through thicket trees, and other
+solid terrain break sight; passable rocks do not. Guardians follow the last seen
+position, then break pursuit and walk away after five seconds without sight.
+Contact opens battle with `A guardian has appeared.` No interaction key is needed.
+Leaving an area or reviving clears pursuit. Kyle retains his separate dialogue
+and encounter upstairs.
+
+Guardians have twice the ordinary attack, defense, and health for their level.
 
 | Guardian | Displayed Level | Health | Attack | Defense |
 | --- | --- | --- | --- | --- |
-| Sylvan | 20 | 100 | 8 | 6 |
-| Azure | 50 | 160 | 11 | 8 |
-| Plains | 100 | 240 | 14 | 10 |
+| Sylvan | 20 | 160 | 46 | 14 |
+| Azure | 50 | 340 | 106 | 26 |
+| Plains | 100 | 640 | 206 | 46 |
 
-Guardians use explicit combat stats rather than the ordinary-enemy level
-formula, so a high displayed level does not automatically cause lethal damage.
 The stairs remain available without defeating all three guardians.
 
 ## Upgrade Balance Audit
@@ -56,8 +62,8 @@ player growth versus ordinary enemy scaling still needs a separate tuning decisi
 ## Temporary Dagger Test Mode
 
 In Pristine Castle, stand over the dusty dagger and inspect it with three
-separate Z presses, then press H while still in the castle. A confirmation
-appears. Holding Z does not count as multiple inspections, and H cannot enable
+separate Z presses, then press H while still in the castle. Activation is silent.
+Holding Z does not count as multiple inspections, and H cannot enable
 the shortcut outside the castle or before the third inspection.
 
 While active, Defend instantly restores the current opponent without an enemy

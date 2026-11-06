@@ -481,6 +481,108 @@ async function verifyCastleRoute(page, label) {
   console.log(`${label}: movement, staff pickup, throne sitting/standing, rubble, exit and reset pass.`);
 }
 
+async function verifyTitleAndStory(page, label) {
+  const cover = page.locator('#title-screen .hero-art');
+  await page.waitForFunction(() => document.querySelector('#title-screen .hero-art').naturalWidth > 0);
+  assert.equal(await cover.getAttribute('src'), 'Split-Path_Cover_Art.png');
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${label}: title fits viewport`);
+  const art = await cover.boundingBox();
+  const panel = await page.locator('.title-panel').boundingBox();
+  assert.ok(art.x + art.width <= panel.x || art.y + art.height <= panel.y, `${label}: cover and Play panel do not overlap`);
+  await page.screenshot({ path: path.join(os.tmpdir(), `split-path-title-${label}.png`) });
+  await page.locator('#play-button').click();
+  const expected = [
+    'Once upon a time, the Pristine King ruled over the Pristine Kingdom.',
+    'But one day, a shadow appeared, killed the king, and took his place.',
+    'Every cube fell under control except for one.',
+    'That cube was the king, reborn as a cube and drained of his power.',
+    'By restoring cubes, the king can regain their power.'
+  ];
+  assert.equal(await page.locator('#story-prev').isDisabled(), true);
+  for (let i = 0; i < expected.length; i += 1) {
+    assert.equal(await page.locator('.story-text').textContent(), expected[i]);
+    assert.equal(await page.locator('#story-slide img, #story-slide .story-visual').count(), 0);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${label}: story page fits viewport`);
+    if (i === 1) await page.screenshot({ path: path.join(os.tmpdir(), `split-path-prologue-${label}.png`) });
+    await page.locator('#story-next').click();
+  }
+  assert.equal(await page.evaluate(() => currentScreen), 'game');
+  console.log(`${label}: cover art, all five text-only pages, and Begin Journey verified.`);
+}
+
+async function verifyGuardianPursuit(page) {
+  const results = await page.evaluate(() => {
+    const passed = [];
+    const check = (value, label) => { if (!value) throw new Error(label); passed.push(label); };
+    resetGame();
+    enterArea('controlledPalace');
+    showScreen('game');
+    contactLockedUntil = 0;
+    const size = config.tileSize;
+    for (const [region, state] of Object.entries(regionalBossStates)) {
+      const enemy = state.palaceEnemy;
+      const base = statsForLevel(enemy.level);
+      check(enemy.attack === 2 * base.attack && enemy.defense === 2 * base.defense && enemy.controlMax === 2 * base.health,
+        `${region}: guardian has twice the normal same-level stats`);
+    }
+    const guardian = regionalBossStates.sylvan.palaceEnemy;
+    const center = (actor, x, y) => {
+      actor.x = (x + 0.5) * size - actor.width / 2;
+      actor.y = (y + 0.5) * size - actor.height / 2;
+    };
+    center(guardian, 12, 10);
+    for (const [x, y] of [[2, 10], [26, 10], [12, 2], [12, 17]]) {
+      center(player, x, y);
+      check(guardianCanSeePlayer(guardian, true), `Guardian sees along cardinal ray to ${x},${y}`);
+    }
+    const now = performance.now();
+    center(player, 24, 13);
+    moveGuardian(guardian, now);
+    check(!guardian.chasing, 'A diagonal player does not acquire guardian aggro');
+    center(player, 26, 10);
+    const area = areas.controlledPalace;
+    const original = area.map;
+    area.map = [...original];
+    const setCover = tile => { area.map[10] = original[10].slice(0, 16) + tile + original[10].slice(17); };
+    setCover('T');
+    check(!guardianCanSeePlayer(guardian, true), 'Solid trees block initial sight');
+    setCover('f');
+    check(!guardianCanSeePlayer(guardian, true), 'Walk-through thicket trees also conceal the King');
+    setCover('R');
+    check(guardianCanSeePlayer(guardian, true), 'Rocks do not conceal the King');
+    moveGuardian(guardian, now);
+    const x = guardian.x;
+    moveGuardian(guardian, now + 16);
+    check(guardian.chasing && guardian.x - x > config.areaMoveSpeed * config.sprintMultiplier, 'Guardian actually runs faster than the King can sprint');
+    setCover('f');
+    moveGuardian(guardian, now + 5015);
+    check(guardian.chasing, 'Four seconds and 999 ms behind cover does not break pursuit');
+    const beforeRetreat = distanceToRect(guardian);
+    moveGuardian(guardian, now + 5016);
+    check(!guardian.chasing && guardian.guardianPursuit.retreatUntil > now + 5016 && distanceToRect(guardian) > beforeRetreat,
+      'Five full seconds behind cover breaks pursuit and makes the guardian walk away');
+    setCover('R');
+    moveGuardian(guardian, now + 5100);
+    check(!guardian.chasing, 'Guardian finishes its retreat before reacquiring sight');
+    moveGuardian(guardian, now + 6300);
+    check(guardian.chasing, 'Guardian can reacquire the King after retreat');
+    setCover('T');
+    guardian.route = [];
+    guardian.routeUntil = 0;
+    for (let frame = 1; frame <= 160 && !rectanglesOverlap(player, guardian); frame += 1) {
+      moveGuardian(guardian, now + 6300 + frame * 16);
+      if (collidesWithBlockedTile(guardian)) throw new Error('Guardian walked through a solid tree');
+    }
+    check(rectanglesOverlap(player, guardian), 'Guardian routes around cover and reaches the King without clipping');
+    area.map = original;
+    finishAreaDeparture();
+    check(!guardian.guardianPursuit && !guardian.chasing, 'Leaving an area clears guardian pursuit');
+    resetGame();
+    return passed;
+  });
+  console.log(results.join('\n'));
+}
+
 async function verifyGuardianProgression(page) {
   await page.waitForFunction(() => Object.values(regionalBossSprites).every(image => image.complete && image.naturalWidth > 0));
   const results = await page.evaluate(() => {
@@ -558,14 +660,16 @@ async function verifyGuardianProgression(page) {
       check(!collidesWithBlockedTile(boss), `${region}: guardian spawns on clear ground`);
       player.x = boss.x;
       player.y = boss.y;
-      updateInteractionPrompt();
-      check(promptMode === 'challenge-boss', `${region}: guardian uses contact and Z`);
       playerState.hasStaff = true;
       if (region === 'azureApex') {
         enterArea('controlledPalace');
-        startBattle(regionalBossStates[region].palaceEnemy);
-      } else usePrompt();
-      check(currentScreen === 'battle' && activeEnemy.regionBoss === region, `${region}: guardian battle opens`);
+        player.x = regionalBossStates[region].palaceEnemy.x;
+        player.y = regionalBossStates[region].palaceEnemy.y;
+      }
+      contactLockedUntil = 0;
+      checkAreaEncounters();
+      check(currentScreen === 'battle' && activeEnemy.regionBoss === region, `${region}: contact starts the guardian battle without Z`);
+      check(document.querySelector('#battle-message').textContent === 'A guardian has appeared.', `${region}: guardian encounter announces its arrival`);
       const points = playerState.divinePoints;
       finishRestoration();
       finishRestoration();
@@ -752,8 +856,10 @@ async function verifyScalingAndDagger(page) {
   await page.keyboard.press('h');
   assert.equal(await page.evaluate(() => daggerTestMode.enabled), false, 'H only activates in Pristine Castle');
   await page.evaluate(() => enterArea('pristineCastle'));
+  const promptBeforeActivation = await page.locator('#interaction-prompt').textContent();
   await page.keyboard.press('h');
   assert.equal(await page.evaluate(() => daggerTestMode.enabled), true, 'Three inspections and H activate test mode');
+  assert.equal(await page.locator('#interaction-prompt').textContent(), promptBeforeActivation, 'Dagger mode activates silently');
   for (const target of ['cube', 'soul', 'sylvan', 'azureApex', 'controlledPlains', 'kyle']) {
     const before = await page.evaluate(target => {
       playerState.hasStaff = true;
@@ -856,10 +962,13 @@ async function verifyScalingAndDagger(page) {
     assert.equal(await desktop.evaluate(() => currentScreen), 'game', 'Restored level 8 enemy cannot restart its encounter');
     console.log('Level 8 encounter, keyboard perfect strike, single restoration reward, and Return recovery pass.');
     await verifyCastleRoute(desktop, 'desktop');
+    await verifyGuardianPursuit(desktop);
     await verifyGuardianProgression(desktop);
     await verifyBossVisuals(desktop, 'desktop', true);
     await verifyScalingAndDagger(desktop);
     await verifyOverworld(desktop, 'desktop');
+    await desktop.goto(origin + '/index.html');
+    await verifyTitleAndStory(desktop, 'desktop');
     if (baseline) {
       const previous = await inspect(await browser.newPage({ viewport: { width: 1280, height: 900 } }), origin + '/baseline/index.html');
       assert.deepEqual(current.initial, previous.initial, 'Initial map and enemy data must match baseline');
@@ -871,8 +980,7 @@ async function verifyScalingAndDagger(page) {
     const localErrors = [];
     local.on('pageerror', error => localErrors.push(error.message));
     await local.goto(pathToFileURL(path.join(root, 'index.html')).href);
-    await local.locator('#play-button').click();
-    await local.locator('#story-skip').click();
+    await verifyTitleAndStory(local, 'mobile-local');
     assert.equal(await local.evaluate(() => currentScreen), 'game');
     assert.equal(await local.evaluate(() => currentAreaId), 'pristineCastle');
     assert.deepEqual(localErrors, []);

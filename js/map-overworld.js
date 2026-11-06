@@ -139,6 +139,7 @@ function finishAreaDeparture() {
   relocateRestoredEnemies(currentAreaId);
   areas[currentAreaId].enemies.forEach(enemy => {
     enemy.chasing = false;
+    delete enemy.guardianPursuit;
     enemy.route = [];
     enemy.routeUntil = 0;
   });

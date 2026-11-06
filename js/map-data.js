@@ -19,9 +19,9 @@ const soulLevelRanges = {
 };
 
 const regionalBossDefinitions = {
-  sylvan: { name: "Sylvan Guardian", level: 20, health: 100, attack: 8, defense: 6, cubes: 3, souls: 0, palaceX: 8 },
-  azureApex: { name: "Azure Guardian", level: 50, health: 160, attack: 11, defense: 8, cubes: 5, souls: 1, palaceX: 15 },
-  controlledPlains: { name: "Plains Guardian", level: 100, health: 240, attack: 14, defense: 10, cubes: 6, souls: 0, palaceX: 22 }
+  sylvan: { name: "Sylvan Guardian", level: 20, cubes: 3, souls: 0, palaceX: 8 },
+  azureApex: { name: "Azure Guardian", level: 50, cubes: 5, souls: 1, palaceX: 15 },
+  controlledPlains: { name: "Plains Guardian", level: 100, cubes: 6, souls: 0, palaceX: 22 }
 };
 
 const regionDirectory = {

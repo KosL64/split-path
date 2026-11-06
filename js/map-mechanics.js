@@ -140,14 +140,15 @@ function initializeBoss() {
 function initializeRegionalBosses() {
   areas.controlledPalace.enemies = [];
   Object.entries(regionalBossDefinitions).forEach(([region, definition]) => {
+    const stats = statsForLevel(definition.level);
     const enemy = {
       id: `${region}-guardian-palace`, name: definition.name, regionBoss: region,
       kind: "boss", visual: "boss", originArea: region,
-      level: definition.level, attack: definition.attack, defense: definition.defense,
-      maxHealth: definition.health, controlMax: definition.health, control: definition.health,
+      level: definition.level, attack: stats.attack * 2, defense: stats.defense * 2,
+      maxHealth: stats.health * 2, controlMax: stats.health * 2, control: stats.health * 2,
       x: definition.palaceX * config.tileSize + 3, y: 9 * config.tileSize,
-      width: 42, height: 48, stationary: true, restored: false, facing: -1,
-      route: [], moveX: 0, moveY: 0
+      width: 42, height: 48, restored: false, facing: -1,
+      route: [], routeUntil: 0, moveX: 0, moveY: 0
     };
     enemy.spawnX = enemy.x;
     enemy.spawnY = enemy.y;
@@ -162,7 +163,8 @@ function revealRegionalBosses() {
     if (state.defeated || state.revealed || !enemies.length || enemies.some((enemy) => !enemy.restored)) return;
     const tiles = collectEnemySpawnTiles(areas[region]);
     const spawn = tiles.find((tile) => tile.x > 5 && tile.y > 5) || tiles[0];
-    const enemy = { ...state.palaceEnemy, id: `${region}-guardian-home`, x: spawn.x * config.tileSize + 3, y: spawn.y * config.tileSize, route: [] };
+    const enemy = { ...state.palaceEnemy, id: `${region}-guardian-home`, x: spawn.x * config.tileSize + 3, y: spawn.y * config.tileSize,
+      guardianPursuit: undefined, chasing: false, route: [], routeUntil: 0 };
     enemy.spawnX = enemy.x;
     enemy.spawnY = enemy.y;
     areas[region].enemies.push(enemy);
@@ -397,6 +399,7 @@ function relocateRestoredEnemies(areaId) {
 function usePalaceStairs() {
   const stairs = areas[currentAreaId].stairs;
   if (!stairs) return;
+  finishAreaDeparture();
   enterArea(stairs.target);
   player.x = stairs.arrival.x * config.tileSize + 2;
   player.y = stairs.arrival.y * config.tileSize;
@@ -469,6 +472,10 @@ function moveEnemies() {
   const area = areas[currentAreaId];
 
   area.enemies.forEach((enemy) => {
+    if (enemy.regionBoss) {
+      if (!bossDefeated(enemy)) moveGuardian(enemy, performance.now());
+      return;
+    }
     if (pauseResidentConversation(enemy, enemy, performance.now())) return;
     if (enemy.stationary) return;
     if (enemy.restored) {
@@ -509,6 +516,79 @@ function moveVillageResidents() {
     resident.villageY = next.y;
     if (resident.villageMoveX) resident.facing = Math.sign(resident.villageMoveX);
   });
+}
+
+function guardianCanSeePlayer(enemy, cardinalOnly) {
+  const size = config.tileSize;
+  const area = areas[currentAreaId];
+  const x = enemy.x + enemy.width / 2, y = enemy.y + enemy.height / 2;
+  const px = player.x + player.width / 2, py = player.y + player.height / 2;
+  let col = Math.floor(x / size), row = Math.floor(y / size);
+  const targetCol = Math.floor(px / size), targetRow = Math.floor(py / size);
+  if (cardinalOnly && col !== targetCol && row !== targetRow) return false;
+  const blocksSight = (tx, ty) => {
+    const tile = area.world ? worldTileAt(area.world.x + tx, area.world.y + ty) : area.map[ty]?.[tx];
+    return tile === "f" || isBlockedTile(tile);
+  };
+  const dx = px - x, dy = py - y;
+  const stepX = Math.sign(dx), stepY = Math.sign(dy);
+  const intervalX = dx ? size / Math.abs(dx) : Infinity;
+  const intervalY = dy ? size / Math.abs(dy) : Infinity;
+  let nextX = dx ? Math.abs((col + (stepX > 0 ? 1 : 0)) * size - x) / Math.abs(dx) : Infinity;
+  let nextY = dy ? Math.abs((row + (stepY > 0 ? 1 : 0)) * size - y) / Math.abs(dy) : Infinity;
+  // Visit each tile crossed by the sight line, including both sides of a corner.
+  while (col !== targetCol || row !== targetRow) {
+    const crossX = col !== targetCol ? nextX : Infinity;
+    const crossY = row !== targetRow ? nextY : Infinity;
+    if (Math.abs(crossX - crossY) < 1e-9) {
+      if (blocksSight(col + stepX, row) || blocksSight(col, row + stepY)) return false;
+      col += stepX; row += stepY; nextX += intervalX; nextY += intervalY;
+    } else if (crossX < crossY) {
+      col += stepX; nextX += intervalX;
+    } else {
+      row += stepY; nextY += intervalY;
+    }
+    if (blocksSight(col, row)) return false;
+  }
+  return true;
+}
+
+function moveGuardian(enemy, now) {
+  if (now < contactLockedUntil || rectanglesOverlap(player, enemy)) return;
+  const pursuit = enemy.guardianPursuit ||= { target: null, lastSeen: 0, retreatUntil: 0 };
+  if (now < pursuit.retreatUntil) {
+    retreatGuardian(enemy);
+    return;
+  }
+  if (guardianCanSeePlayer(enemy, !pursuit.target)) {
+    pursuit.target = { x: player.x, y: player.y, width: player.width, height: player.height };
+    pursuit.lastSeen = now;
+    enemy.chasing = true;
+  }
+  if (!pursuit.target) return;
+  if (now - pursuit.lastSeen >= 5000) {
+    pursuit.target = null;
+    pursuit.retreatUntil = now + 1200;
+    enemy.chasing = false;
+    enemy.route = [];
+    enemy.routeUntil = 0;
+    retreatGuardian(enemy);
+    return;
+  }
+  chaseTarget(enemy, pursuit.target, now);
+}
+
+function retreatGuardian(enemy) {
+  const distance = distanceToRect(enemy);
+  const step = config.areaMoveSpeed * 0.6;
+  const next = [[step, 0], [-step, 0], [0, step], [0, -step]]
+    .map(([dx, dy]) => ({ ...enemy, x: enemy.x + dx, y: enemy.y + dy }))
+    .filter(candidate => distanceToRect(candidate) > distance && !collidesWithBlockedTile(candidate))
+    .sort((a, b) => distanceToRect(b) - distanceToRect(a))[0];
+  if (!next) return;
+  if (next.x !== enemy.x) enemy.facing = Math.sign(next.x - enemy.x);
+  enemy.x = next.x;
+  enemy.y = next.y;
 }
 
 function moveEnemy(enemy) {
@@ -619,8 +699,9 @@ function chaseTarget(enemy, targetEntity, now) {
     y: Math.floor((targetEntity.y + targetEntity.height / 2) / size)
   };
   const goalKey = `${goal.x},${goal.y}`;
-  const atTileCenter = Math.abs((enemy.x - 7) / size - Math.round((enemy.x - 7) / size)) < 0.001
-    && Math.abs((enemy.y - 5) / size - Math.round((enemy.y - 5) / size)) < 0.001;
+  const offset = enemyTileOffset(enemy);
+  const atTileCenter = Math.abs((enemy.x - offset.x) / size - Math.round((enemy.x - offset.x) / size)) < 0.001
+    && Math.abs((enemy.y - offset.y) / size - Math.round((enemy.y - offset.y) / size)) < 0.001;
   if ((!enemy.route.length && now >= enemy.routeUntil)
     || (atTileCenter && now >= enemy.routeUntil && enemy.routeGoal !== goalKey)) {
     enemy.route = findEnemyRoute(enemy, goal, targetEntity);
@@ -643,7 +724,8 @@ function chaseTarget(enemy, targetEntity, now) {
     next.y += dy / distance * speed;
   }
   if (collidesWithBlockedTile(next)) {
-    enemy.routeUntil = 0;
+    if (enemy.regionBoss) enemy.route = [];
+    enemy.routeUntil = enemy.regionBoss ? now + 180 : 0;
     return;
   }
   if (Math.abs(dx) > 0.1) enemy.facing = Math.sign(dx);
@@ -654,6 +736,7 @@ function chaseTarget(enemy, targetEntity, now) {
 function findEnemyRoute(enemy, goal, targetEntity = player) {
   const area = areas[currentAreaId];
   const size = config.tileSize;
+  const offset = enemyTileOffset(enemy);
   const start = {
     x: Math.floor((enemy.x + enemy.width / 2) / size),
     y: Math.floor((enemy.y + enemy.height / 2) / size)
@@ -669,6 +752,7 @@ function findEnemyRoute(enemy, goal, targetEntity = player) {
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
       const next = { x: tile.x + dx, y: tile.y + dy };
       if (parents.has(key(next)) || isBlockedTile(area.map[next.y]?.[next.x]) || (!enemy.restored && !landscapeSpawnReachable(area, next.x, next.y))) continue;
+      if (enemy.regionBoss && collidesWithBlockedTile({ ...enemy, x: next.x * size + offset.x, y: next.y * size + offset.y })) continue;
       parents.set(key(next), tile);
       queue.push(next);
     }
@@ -676,7 +760,7 @@ function findEnemyRoute(enemy, goal, targetEntity = player) {
   if (!parents.has(goalKey)) return [];
   const route = [];
   for (let tile = goal; tile; tile = parents.get(key(tile))) {
-    route.unshift({ x: tile.x * size + 7, y: tile.y * size + 5 });
+    route.unshift({ x: tile.x * size + offset.x, y: tile.y * size + offset.y });
   }
   // Center within the starting tile before turning through narrow passages.
   if (route.length === 1) return [{ x: targetEntity.x + (targetEntity.width - enemy.width) / 2,
@@ -685,7 +769,13 @@ function findEnemyRoute(enemy, goal, targetEntity = player) {
 }
 
 function enemyMoveSpeed(enemy) {
+  if (enemy.regionBoss) return config.areaMoveSpeed * config.sprintMultiplier * 1.2;
   return enemy.visual === "flying" ? 1 : 0.8;
+}
+
+function enemyTileOffset(enemy) {
+  return enemy.regionBoss ? { x: (config.tileSize - enemy.width) / 2, y: (config.tileSize - enemy.height) / 2 }
+    : { x: 7, y: 5 };
 }
 
 function moveEnemyInCurrentDirection(enemy, now, speed = enemyMoveSpeed(enemy)) {
@@ -805,7 +895,7 @@ function updateInteractionPrompt() {
       return;
     }
 
-    const boss = areas[currentAreaId].enemies.find((enemy) => enemy.kind === "boss" && !bossDefeated(enemy) && rectanglesOverlap(player, enemy));
+    const boss = areas[currentAreaId].enemies.find((enemy) => enemy.kind === "boss" && !enemy.regionBoss && !bossDefeated(enemy) && rectanglesOverlap(player, enemy));
     if (boss) {
       activeEnemy = boss;
       promptMode = "challenge-boss";
@@ -1069,10 +1159,6 @@ function hasRestoredVeteran() {
 }
 
 function beginBossDialogue() {
-  if (activeEnemy?.regionBoss) {
-    startBattle(activeEnemy);
-    return;
-  }
   bossDialogue = hasRestoredVeteran()
     ? ["Ah king... your here at last.", "Your probably wondering who i am aren't you?", "well... its ???.", "But you can call me Kyle!"]
     : ["OH? who are you?", "no matter, ill just kill you anyways."];
@@ -1115,8 +1201,11 @@ function tileAt(worldX, worldY) {
 }
 
 function checkAreaEncounters() {
-  if (gameMode !== "area" || performance.now() < contactLockedUntil) return;
-  const enemy = areas[currentAreaId].enemies.find((candidate) => candidate.kind !== "boss" && !candidate.restored && rectanglesOverlap(player, candidate));
+  if (currentScreen !== "game" || gameMode !== "area" || performance.now() < contactLockedUntil) return;
+  const overlaps = candidate => !bossDefeated(candidate) && rectanglesOverlap(player, candidate);
+  const enemies = areas[currentAreaId].enemies;
+  const enemy = enemies.find(candidate => candidate.regionBoss && overlaps(candidate))
+    || enemies.find(candidate => candidate.kind !== "boss" && overlaps(candidate));
   if (enemy) startBattle(enemy);
 }
 

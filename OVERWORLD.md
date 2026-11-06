@@ -101,8 +101,8 @@ Before spawning enemies, the expanded world caches full-hitbox walking routes
 with the villages locked. Hostiles spawn and move only in reachable terrain,
 preventing forest pockets from trapping an enemy needed to unlock a village.
 Region actors remain within their own chunk; they do not roam into a neighboring
-village or follow the player across regions. Boss pursuit and stat changes from
-the separate `Boss update.txt` are intentionally still pending.
+village or follow the player across regions. Regional guardian pursuit and
+combat rules are documented in `BOSS-PROGRESSION.md`.
 
 New Game resets progression and starts inside Pristine Castle. Direct local-file
 play is retained; no dev server or build step is required.

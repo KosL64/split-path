@@ -22,11 +22,11 @@ const upgradeDefinitions = {
 };
 
 const storySlides = [
-  { title: "The King", text: "Long ago, the Pristine King watched over the cubes and souls of the land.", image: "img/split-path-lore.png" },
-  { title: "The Takeover", text: "A mysterious figure appeared. One by one, cubes across the kingdom fell under its control.", image: "img/split-path-1.jpg" },
-  { title: "Reborn", text: "The king's power was taken, and he awakened again in a new form.", image: "img/split-path-1.jpg" },
-  { title: "Divine Points", text: "By restoring controlled creatures, the king earns Divine Points: chips of light created through good deeds.", image: "notes/NOT DWIN POINTS!!!.png" },
-  { title: "The Split Path", text: "Every point brings him closer to his former power, but the path back can split in many directions.", image: "img/split-path-2.jpg" }
+  "Once upon a time, the Pristine King ruled over the Pristine Kingdom.",
+  "But one day, a shadow appeared, killed the king, and took his place.",
+  "Every cube fell under control except for one.",
+  "That cube was the king, reborn as a cube and drained of his power.",
+  "By restoring cubes, the king can regain their power."
 ];
 
 function statsForLevel(level) {
@@ -56,11 +56,9 @@ function startGame() {
 function renderStory() {
   const slide = storySlides[storyIndex];
   document.querySelector("#story-slide").innerHTML = `
-    <div class="story-visual" style="background-image:url('${slide.image.replace("'", "%27")}')"></div>
     <div class="story-copy">
       <p class="eyebrow">Story ${storyIndex + 1} / ${storySlides.length}</p>
-      <h2>${slide.title}</h2>
-      <p>${slide.text}</p>
+      <p class="story-text">${slide}</p>
     </div>
   `;
 
@@ -121,8 +119,10 @@ function startBattle(enemy) {
     battleEnemy.classList.add("boss-cube");
     battleEnemy.style.backgroundImage = `url("${bossSprite.src}")`;
   }
-  document.querySelector("#battle-message").textContent = enemy.kind === "boss"
-    ? `${enemy.name} blocks the path. ${enemy.regionBoss ? "The guardian battle begins!" : "The final battle begins!"}`
+  document.querySelector("#battle-message").textContent = enemy.regionBoss
+    ? "A guardian has appeared."
+    : enemy.kind === "boss"
+    ? `${enemy.name} blocks the path. The final battle begins!`
     : enemy.visual === "flying"
     ? `A lv ${enemy.level} controlled soul spotted you.`
     : `A level ${enemy.level} controlled cube lashes out. Purify it with your attacks.`;
@@ -252,11 +252,12 @@ function revivePlayerAtAreaStart() {
   player.x = area.start.x * config.tileSize + (config.tileSize - player.width) / 2;
   player.y = area.start.y * config.tileSize + 2;
   area.enemies.forEach((enemy) => {
-    if (enemy.chasing) {
+    if (enemy.chasing || enemy.regionBoss) {
       enemy.x = enemy.spawnX;
       enemy.y = enemy.spawnY;
     }
     enemy.chasing = false;
+    delete enemy.guardianPursuit;
     enemy.route = [];
     enemy.routeUntil = 0;
     enemy.movingUntil = 0;
@@ -599,7 +600,6 @@ window.addEventListener("keydown", (event) => {
   if (key === "h" && !event.repeat && currentScreen === "game" && gameMode === "area"
     && currentAreaId === "pristineCastle" && daggerTestMode.inspections >= 3 && !daggerTestMode.enabled) {
     daggerTestMode.enabled = true;
-    showTemporaryPrompt("Dagger test mode enabled. Defend instantly restores enemies.");
   }
   if ((key === "z" || key === "enter") && !event.repeat) usePrompt();
   if (key === "u" && currentScreen === "game") {
