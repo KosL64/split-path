@@ -1,92 +1,24 @@
 // map-rendering: see CODE-OWNERSHIP.md for shared state and loading order.
 
 function drawWorld() {
-  if (gameMode === "kingdom") drawKingdomMap();
-  else drawAreaMap();
-  drawPlayer();
-}
-
-function drawKingdomMap() {
-  const { cameraX, cameraY } = kingdomMap;
-  ctx.fillStyle = "#242631";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  drawKingdomTerrain(cameraX, cameraY);
-
-  kingdomMap.paths.forEach((path) => {
-    ctx.strokeStyle = "#f2c95f";
-    ctx.lineWidth = 18;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.beginPath();
-    path.forEach(([x, y], index) => {
-      if (index === 0) ctx.moveTo(x - cameraX, y - cameraY);
-      else ctx.lineTo(x - cameraX, y - cameraY);
-    });
-    ctx.stroke();
-    ctx.strokeStyle = "#6b4f22";
-    ctx.lineWidth = 3;
-    ctx.stroke();
-  });
-
-  kingdomMap.nodes.forEach((node) => drawKingdomNode(node, cameraX, cameraY));
-  drawMapLabel("Kingdom Map", "Choose an area with Z or Enter");
-}
-
-function drawKingdomTerrain(cameraX, cameraY) {
-  ctx.fillStyle = "#405f5b";
-  for (let x = -80; x < kingdomMap.width; x += 160) {
-    for (let y = -60; y < kingdomMap.height; y += 140) {
-      const drawX = x - cameraX;
-      const drawY = y - cameraY;
-      if (drawX < -80 || drawY < -80 || drawX > canvas.width + 80 || drawY > canvas.height + 80) continue;
-      drawTree(drawX, drawY, 1);
-    }
+  const exterior = !!areas[currentAreaId].world;
+  if (exterior) {
+    drawOverworld();
+    drawOverworldActors();
+  } else {
+    drawAreaMap();
+    drawPlayer();
   }
-
-  ctx.fillStyle = "rgba(119, 103, 202, 0.22)";
-  ctx.beginPath();
-  ctx.arc(1220 - cameraX, 210 - cameraY, 120, 0, Math.PI * 2);
-  ctx.fill();
+  drawWorldAtmosphere();
+  if (exterior) drawMapLabel(landscapeLocationName(), areas[currentAreaId].world.parent ? "Village"
+    : currentAreaId === "castleGrounds" ? "Pristine Bridge | Pristine River" : "");
 }
 
-function drawKingdomNode(node, cameraX, cameraY) {
-  const x = node.x - cameraX;
-  const y = node.y - cameraY;
+function drawAreaMap(areaId = currentAreaId, cameraX = areas[areaId].cameraX, cameraY = areas[areaId].cameraY, label = true, actors = true) {
+  const area = areas[areaId];
+  const palette = areaPalette(areaId);
 
-  ctx.save();
-  ctx.shadowColor = node.unlocked ? "rgba(242,201,95,.7)" : "rgba(20,19,23,.6)";
-  ctx.shadowBlur = node.unlocked ? 18 : 0;
-  ctx.fillStyle = node.unlocked ? "#f2c95f" : "#5b5962";
-  ctx.strokeStyle = "#211f25";
-  ctx.lineWidth = 4;
-  ctx.beginPath();
-  ctx.arc(x, y, 24, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-  ctx.restore();
-
-  if (node.id === "sylvan") drawTinyShrine(x - 18, y - 28);
-  if (node.id === "pristineCastle") drawTower(x - 17, y - 48);
-  if (node.id === "azureApex") drawRuin(x - 24, y - 30);
-  if (node.id === "azureVillage") drawHouse(x - 26, y - 34);
-  if (node.id === "sylvanVillage") drawHouse(x - 26, y - 34);
-  if (node.id === "controlledPalace") drawTower(x - 17, y - 48);
-  if (node.id === "controlledPlains") drawTree(x - 18, y - 35, 1.2);
-
-  ctx.fillStyle = node.unlocked ? "#f3eee1" : "#b8b2a4";
-  ctx.font = "800 15px Trebuchet MS";
-  ctx.textAlign = "center";
-  ctx.fillText(node.name, x, y + 48);
-  ctx.textAlign = "left";
-}
-
-function drawAreaMap() {
-  const area = areas[currentAreaId];
-  const cameraX = area.cameraX;
-  const cameraY = area.cameraY;
-  const palette = areaPalette(currentAreaId);
-
-  ctx.fillStyle = area.healed ? palette.healedBase : palette.controlledBase;
+  ctx.fillStyle = area.houseInterior ? "#20242a" : area.healed ? palette.healedBase : palette.controlledBase;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   const startCol = Math.floor(cameraX / config.tileSize);
@@ -94,43 +26,53 @@ function drawAreaMap() {
   const startRow = Math.floor(cameraY / config.tileSize);
   const endRow = Math.ceil((cameraY + canvas.height) / config.tileSize);
 
-  if (currentAreaId === "sylvan" && sylvanGrassPattern) {
+  const groundPattern = ["sylvan", "sylvanVillage"].includes(areaId) ? sylvanGrassPattern
+    : ["azureApex", "azureVillage", "azureMountain"].includes(areaId) ? azureGroundPattern : null;
+  if (groundPattern) {
     ctx.save();
     ctx.translate(-cameraX, -cameraY);
-    ctx.fillStyle = sylvanGrassPattern;
+    ctx.fillStyle = groundPattern;
     ctx.fillRect(cameraX, cameraY, canvas.width, canvas.height);
     ctx.restore();
-    ctx.fillStyle = area.healed ? "rgba(0,0,0,.04)" : "rgba(0,0,0,.18)";
+    const groundHealed = areaId === "sylvanVillage" ? areas.sylvan.healed : areaId === "azureVillage" ? areas.azureApex.healed : area.healed;
+    ctx.fillStyle = groundHealed ? "rgba(0,0,0,.04)" : "rgba(0,0,0,.18)";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
 
   for (let row = startRow; row <= endRow; row += 1) {
     for (let col = startCol; col <= endCol; col += 1) {
-      drawTile(area.map[row]?.[col], col * config.tileSize - cameraX, row * config.tileSize - cameraY, area.healed, currentAreaId);
+      drawTile(area.map[row]?.[col], col * config.tileSize - cameraX, row * config.tileSize - cameraY, area.healed, areaId);
     }
   }
 
   if (area.garageHome) drawVillageGarageHouse(area.garageHome.x * config.tileSize - cameraX, area.garageHome.y * config.tileSize - cameraY, palette);
-  drawAreaRocks(area, cameraX, cameraY);
-  if (currentAreaId === "pristineCastle") {
+  if (area.houseInterior) drawHouseFurnishings(cameraX, cameraY);
+  drawAreaRocks(area, cameraX, cameraY, areaId);
+  if (areaId === "pristineCastle") {
     drawCastleThrone((area.throne.x + 1) * config.tileSize - cameraX, (area.throne.y + 1) * config.tileSize - cameraY);
     drawCastleWallDecorations(cameraX, cameraY);
   }
-  visibleAreaEnemies().forEach((enemy) => drawEnemy(enemy, cameraX, cameraY));
-  drawVillageResidents(cameraX, cameraY);
-  const subtitle = currentAreaId === "pristineCastle"
+  if (actors) {
+    visibleAreaEnemies(areaId).forEach((enemy) => drawEnemy(enemy, cameraX, cameraY));
+    drawVillageResidents(cameraX, cameraY, areaId);
+  }
+  if (!label) return;
+  const subtitle = areaId === "pristineCastle"
     ? playerState.hasStaff
       ? castleState.exitCleared ? "The road to the kingdom is open." : "Use the staff to clear the fallen rocks."
       : "Search the ruined throne room for your staff."
     : area.signs
     ? "Read the signs, then leave through the glowing doorway."
-    : villageSourceFor(currentAreaId)
+    : villageSourceFor(areaId)
       ? "Restored residents gather here."
-      : "Explore the area. Step on the glowing exit to return.";
+      : "";
   drawMapLabel(area.name, subtitle);
 }
 
 function areaPalette(areaId) {
+  if (areaId === "azureMountain") areaId = "azureApex";
+  if (areaId === "castleGrounds") areaId = "sylvanVillage";
+  if (areas[areaId]?.houseInterior) areaId = areas[areaId].villageTheme;
   const palettes = {
     sylvan: {
       controlledBase: "#20352b",
@@ -203,14 +145,27 @@ function areaPalette(areaId) {
 }
 
 function drawTile(tile, x, y, healed, areaId) {
+  if (!tile) return;
+  tile = resolveLandscapeTile(tile);
   const size = config.tileSize;
   const palette = areaPalette(areaId);
-  const grassy = areaId === "sylvan" && sylvanGrassPattern;
+  if (areas[areaId]?.houseInterior) {
+    ctx.fillStyle = "#859493";
+    ctx.fillRect(x, y, size, size);
+    ctx.strokeStyle = "#647a78";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, y, size, size);
+    if (tile !== "^" && tile !== "E") {
+      return;
+    }
+  }
+  const grassy = (["sylvan", "sylvanVillage"].includes(areaId) && sylvanGrassPattern)
+    || (["azureApex", "azureVillage", "azureMountain"].includes(areaId) && azureGroundPattern);
   ctx.fillStyle = healed ? palette.healedFloor : palette.floor;
   if (!grassy) ctx.fillRect(x, y, size, size);
 
   if (tile === "^") {
-    ctx.fillStyle = areaId === "pristineCastle" ? "#706b7c" : palette.wall;
+    ctx.fillStyle = areas[areaId]?.houseInterior ? "#525557" : areaId === "pristineCastle" ? "#706b7c" : palette.wall;
     ctx.fillRect(x, y, size, size);
     if (areaId === "pristineCastle") {
       ctx.strokeStyle = "#393641";
@@ -226,15 +181,13 @@ function drawTile(tile, x, y, healed, areaId) {
     ctx.fillRect(x + 2, y + 2, size - 4, size / 2 - 3);
   }
 
-  if (tile === "T") {
+  if (tile === "T" || tile === "f") {
     ctx.fillStyle = healed ? palette.tree : palette.wall;
     if (!grassy) ctx.fillRect(x, y, size, size);
-    if (areaId === "sylvan" && readySylvanSprite("tree")) {
-      ctx.drawImage(sylvanSprites.tree, x - 13, y - 60, size + 26, size + 60);
-    } else {
-      drawTree(x + 8, y + 2, areaId === "sylvanVillage" ? 0.95 : 0.72, palette.tree);
-    }
+    if (!areas[areaId]?.world || !["sylvan", "sylvanVillage"].includes(areaId)) drawMapTree(x, y, areaId);
   }
+
+  if (tile === "p") drawPathwayTile(x, y, cameraForArea(areaId));
 
   if (tile === "R" && !enhancedRockAreas.has(areaId)) {
     ctx.fillStyle = "#6b6576";
@@ -262,6 +215,23 @@ function drawTile(tile, x, y, healed, areaId) {
     ctx.quadraticCurveTo(x + 38, y + 29, x + 45, y + 22);
     ctx.stroke();
   }
+
+  if (tile === "=") {
+    ctx.fillStyle = "#a4adb1";
+    ctx.fillRect(x, y, size, size);
+    ctx.strokeStyle = "#586975";
+    ctx.lineWidth = 2;
+    for (let row = 0; row < size; row += 16) {
+      ctx.beginPath();
+      ctx.moveTo(x, y + row);
+      ctx.lineTo(x + size, y + row);
+      ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x + (row % 32 ? 12 : 32), y + row);
+      ctx.lineTo(x + (row % 32 ? 12 : 32), y + row + 16); ctx.stroke();
+    }
+  }
+
+  drawLandscapeTile(tile, x, y);
 
   if (tile === "h") drawVillageHouse(x, y, palette);
 
@@ -347,6 +317,73 @@ function drawTile(tile, x, y, healed, areaId) {
   if (!grassy) ctx.strokeRect(x, y, size, size);
 }
 
+function cameraForArea(areaId) {
+  const area = areas[areaId];
+  return area.world ? {
+    x: overworld.cameraX - area.world.x * config.tileSize,
+    y: overworld.cameraY - area.world.y * config.tileSize
+  } : { x: area.cameraX, y: area.cameraY };
+}
+
+function drawPathwayTile(x, y, camera) {
+  if (!pathwayPattern) return;
+  ctx.save();
+  ctx.globalAlpha = landscape.pathOpacity;
+  // Multiplication makes the white reference background blend into the terrain.
+  ctx.globalCompositeOperation = "multiply";
+  ctx.translate(-camera.x, -camera.y);
+  ctx.fillStyle = pathwayPattern;
+  ctx.fillRect(x + camera.x, y + camera.y, config.tileSize, config.tileSize);
+  ctx.restore();
+}
+
+function drawMapTree(x, y, areaId) {
+  const size = config.tileSize;
+  if (["sylvan", "sylvanVillage"].includes(areaId) && readySylvanSprite("tree")) {
+    ctx.drawImage(sylvanSprites.tree, x - 13, y - 60, size + 26, size + 60);
+  } else {
+    drawTree(x + 8, y + 2, areaId === "sylvanVillage" ? 0.95 : 0.72, areaPalette(areaId).tree);
+  }
+}
+
+function collectOverworldDrawables() {
+  const items = [];
+  const size = config.tileSize;
+  overworld.regions.forEach(areaId => {
+    const area = areas[areaId];
+    const camera = cameraForArea(areaId);
+    if (-camera.x > canvas.width + 128 || -camera.y > canvas.height + 128
+      || area.width * size - camera.x < -128 || area.height * size - camera.y < -128) return;
+    if (["sylvan", "sylvanVillage"].includes(areaId)) {
+      const minRow = Math.max(0, Math.floor(camera.y / size) - 2);
+      const maxRow = Math.min(area.height - 1, Math.ceil((camera.y + canvas.height) / size) + 2);
+      const minCol = Math.max(0, Math.floor(camera.x / size) - 2);
+      const maxCol = Math.min(area.width - 1, Math.ceil((camera.x + canvas.width) / size) + 2);
+      for (let row = minRow; row <= maxRow; row += 1) {
+        for (let col = minCol; col <= maxCol; col += 1) {
+          if (worldAreaAt(area.world.x + col, area.world.y + row) !== areaId) continue;
+          if (!["T", "f"].includes(resolveLandscapeTile(area.map[row][col]))) continue;
+          items.push({ kind: "tree", areaId, col, row, depth: (area.world.y + row + 1) * size,
+            draw: () => drawMapTree(col * size - camera.x, row * size - camera.y, areaId) });
+        }
+      }
+    }
+    const enemies = [...visibleAreaEnemies(areaId), ...villageResidents(areaId).map(positionedResident)];
+    enemies.forEach(enemy => {
+      items.push({ kind: "actor", depth: area.world.y * size + enemy.y + enemy.height,
+        draw: () => drawEnemy(enemy, camera.x, camera.y) });
+    });
+  });
+  const area = areas[currentAreaId];
+  items.push({ kind: "player", depth: area.world.y * size + player.y + player.height, draw: drawPlayer });
+  return items.sort((a, b) => a.depth - b.depth || Number(a.kind === "tree") - Number(b.kind === "tree"));
+}
+
+function drawOverworldActors() {
+  // Render complete canopies after all region floors, without chunk-edge clipping.
+  collectOverworldDrawables().forEach(item => item.draw());
+}
+
 function drawCastleThrone(x, y) {
   const left = x - 48;
   const top = y - 48;
@@ -430,7 +467,7 @@ function drawCastleWallDecorations(cameraX, cameraY) {
   });
 }
 
-function drawAreaRocks(area, cameraX, cameraY) {
+function drawAreaRocks(area, cameraX, cameraY, areaId = currentAreaId) {
   const decorations = area.rockDecorations || [];
 
   decorations.forEach((rock) => {
@@ -442,7 +479,7 @@ function drawAreaRocks(area, cameraX, cameraY) {
     if (worldY + boundsHeight < cameraY || worldY > cameraY + canvas.height) return;
 
     const drawSize = rockDrawSize(rock);
-    if (currentAreaId === "sylvan") {
+    if (areaId === "sylvan") {
       const spriteName = rock.size === "large" ? "rockLarge" : ((rock.x + rock.y) % 2 ? "rockSmall" : "rockWide");
       const sprite = readySylvanSprite(spriteName);
       if (sprite) {
@@ -481,7 +518,7 @@ function drawFallbackRock(x, y, width, height) {
 }
 
 function drawPlayer() {
-  const camera = gameMode === "kingdom" ? kingdomMap : areas[currentAreaId];
+  const camera = areas[currentAreaId];
   const screenX = player.x - camera.cameraX;
   const screenY = player.y - camera.cameraY;
   const sitProgress = castleState.sitting ? Math.min(1, (performance.now() - castleState.sittingStartedAt) / 260) : 0;
@@ -816,8 +853,8 @@ function drawRestoredLabel(x, y) {
   ctx.fillText("...", x + 10, y);
 }
 
-function drawVillageResidents(cameraX, cameraY) {
-  villageResidents().forEach((resident) => {
+function drawVillageResidents(cameraX, cameraY, areaId = currentAreaId) {
+  villageResidents(areaId).forEach((resident) => {
     drawEnemy(positionedResident(resident), cameraX, cameraY);
   });
 }

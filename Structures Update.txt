@@ -1,0 +1,11 @@
+the map is kinda bare... so we gotta add some structures!!! I would of said this last change log, but idk.
+
+1. In Sylvan, add a forest, and have it surround sylvan village. the forest is called Sylvan Thicket and should be PRETTY BIG!!! once its made, ill say if you need to make it bigger or smaller. use the same tree sprites that i made as the trees for Sylvan Thicket.
+
+2. Also, so... you know that triangle sign thing in sylvan, have it become an actual sign covered in like... grass and vines (also make it green), saying: "W lc me to Sylvan" it s says welcome to sylvan but the letters are slightly scratched off. don't make it a full on structure, just a small sign. i thought you knew that but am just clarifying. 
+
+3. so. this, will probably be the most complicated. Azure apex, is a giant mountain... but there is no mountains... its like... just blue rocks. NOW! so... you know how the azure apex village is on a raised area from the rest of azure apex? so... inside of the village, add one more raised area and some clouds on the ground to make it look like the player is higher up. so, then... if you walk into the clouds, (by the way, the clouds will cover the player) make so you can enter Azure Mountain. 
+
+4. In azure, at like... middle bottom of azure apex, is a hot spring. now, just like the chair in the pristine castle, it can heal the player. its this little body of water surrounded by rocks that is enterable. 
+
+5. Add a path. so... im gonna make a new picture of the map, and make a path. this path will lead everywhere, but once it leads into controlled plains, there will be a broken structure. its this dark purple walkway. again, im gonna draw it so you know what it looks like. OK!!! the image is in the images folder and not assets. that should show you where the path and walkway is. 

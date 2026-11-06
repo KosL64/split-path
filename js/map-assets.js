@@ -12,6 +12,27 @@ sylvanGrass.onload = () => {
   sylvanGrassPattern = ctx.createPattern(tile, "repeat");
 };
 sylvanGrass.src = "img/assets/sylvan/grass.jpg";
+let azureGroundPattern = null;
+const azureGround = new Image();
+azureGround.onload = () => {
+  const tile = document.createElement("canvas");
+  tile.width = 192;
+  tile.height = 108;
+  tile.getContext("2d").drawImage(azureGround, 0, 0, tile.width, tile.height);
+  azureGroundPattern = ctx.createPattern(tile, "repeat");
+};
+azureGround.src = "img/assets/Azure Apex/Azure-Apex_Background.jpg";
+let pathwayPattern = null;
+const pathwayTexture = new Image();
+pathwayTexture.onload = () => {
+  const tile = document.createElement("canvas");
+  tile.width = 96;
+  tile.height = 96;
+  // Use the painted stones without the reference image's large outer margin.
+  tile.getContext("2d").drawImage(pathwayTexture, 256, 108, 224, 224, 0, 0, 96, 96);
+  pathwayPattern = ctx.createPattern(tile, "repeat");
+};
+pathwayTexture.src = "img/assets/Pathway.png";
 const restoredSylvanSprites = Object.fromEntries(
   ["ground", "flying"].map((name) => {
     const image = new Image();

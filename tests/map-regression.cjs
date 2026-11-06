@@ -30,7 +30,7 @@ async function inspect(page, url) {
     enemies: area.enemies.map(enemy => ({ id: enemy.id, level: enemy.level, visual: enemy.visual, x: enemy.x, y: enemy.y, attack: enemy.attack, defense: enemy.defense, controlMax: enemy.controlMax }))
   }])));
   const images = {};
-  for (const id of Object.keys(initial)) {
+  for (const id of Object.keys(initial).filter(id => !/House\d+$/.test(id))) {
     await page.evaluate(id => {
       resetGame();
       showScreen('game');
@@ -40,8 +40,8 @@ async function inspect(page, url) {
     }, id);
     images[id] = await page.locator('#game-canvas').screenshot();
   }
-  await page.evaluate(() => { enterKingdom(); updateCamera(); drawWorld(); });
-  images.kingdom = await page.locator('#game-canvas').screenshot();
+  await page.evaluate(() => { enterArea('castleGrounds'); updateCamera(); drawWorld(); });
+  images.overworld = await page.locator('#game-canvas').screenshot();
   const checks = await page.evaluate(() => {
     const passed = [];
     const check = (condition, label) => {
@@ -70,7 +70,7 @@ async function inspect(page, url) {
     activeEnemy = resident;
     finishRestoration();
     check(resident.restored && !resident.relocated && playerState.divinePoints === 5, 'Restoration grants points and keeps the resident in the area');
-    leaveArea();
+    finishAreaDeparture();
     check(resident.relocated, 'Leaving relocates restored residents');
     enterArea('sylvanVillage');
     const positioned = positionedResident(resident);
@@ -88,7 +88,7 @@ async function inspect(page, url) {
     activeEnemy.restored = false;
     finishRestoration();
     check(areas.controlledPlains.healed && areas.controlledPlains.name === 'The Ancient Plains', 'Final plains restoration changes the area name');
-    check(kingdomMap.nodes.find(node => node.areaId === 'controlledPlains').name === 'The Ancient Plains', 'Kingdom Map shows the restored plains name');
+    check(regionDirectory.nodes.find(node => node.areaId === 'controlledPlains').name === 'The Ancient Plains', 'Region directory shows the restored plains name');
     check(areaPalette('controlledPlains').healedGrass === '#e0df70', 'Restored plains retain yellow-green grass');
     resetGame();
     check(areas.controlledPlains.name === 'Controlled Plains' && !areas.controlledPlains.healed && !talkingResident, 'Reset clears map progression and dialogue');
@@ -154,6 +154,276 @@ async function inspect(page, url) {
   return { initial, images, checks };
 }
 
+async function verifyOverworld(page, label) {
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.waitForFunction(() => !!pathwayPattern && !!azureGroundPattern && pathwayTexture.complete && sylvanSprites.tree.complete);
+  const results = await page.evaluate(() => {
+    cancelAnimationFrame(animationFrameId);
+    resetGame();
+    showScreen('game');
+    playerState.hasStaff = true;
+    castleState.exitCleared = true;
+    returnToExterior();
+    const passed = [];
+    const check = (value, message) => { if (!value) throw new Error(message); passed.push(message); };
+    const sample = createAreaGrid(24, 24, '^', '^');
+    paintLandscapePath(sample, [[8, 3], [8, 18], [18, 18]]);
+    check(sample[10].filter(tile => tile === 'p').length === 2
+      && sample.filter(row => row[14] === 'p').length === 2, 'Straight path legs remain exactly two tiles wide through turns');
+    check(landscape.pathOpacity === 0.65 && decodeURIComponent(pathwayTexture.src).endsWith('/Pathway.png'), 'Roads use Luciano pathway texture at 35 percent fade');
+    check(decodeURIComponent(azureGround.src).endsWith('/Azure-Apex_Background.jpg'), 'Azure uses the first ground picture');
+    let passableTrees = 0, solidTrees = 0, walkThrough = null;
+    const t = landscape.thicket;
+    areas.sylvan.map.forEach((row, y) => [...row].forEach((tile, x) => {
+      if (tile === 'f') {
+        if (x < t.x || x >= t.x + t.width || y < t.y || y >= t.y + t.height) throw new Error('Pass-through tree outside Sylvan Thicket');
+        passableTrees += 1;
+        const rect = { x: (areas.sylvan.world.x + x) * config.tileSize + 2,
+          y: (areas.sylvan.world.y + y + 1) * config.tileSize - player.height / 2,
+          width: player.width, height: player.height };
+        if (!walkThrough && !worldRectBlocked(rect) && !worldRectBlocked({ ...rect, x: rect.x + 4 })) walkThrough = { x, y };
+      }
+      if (tile === 'T' && x >= t.x && x < t.x + t.width && y >= t.y && y < t.y + t.height) solidTrees += 1;
+    }));
+    check(passableTrees > solidTrees * 3 && !isBlockedTile('f') && isBlockedTile('T') && isBlockedTile('G'), 'Most thicket trees are passable; ordinary trees and locked entrance barriers stay solid');
+    check(Object.entries(areas).every(([id, area]) => id === 'sylvan' || area.map.every(row => !row.includes('f'))), 'Pass-through trees exist only in Sylvan Thicket');
+    if (!walkThrough) throw new Error('No full-hitbox pass-through tree found');
+    enterArea('sylvan');
+    player.x = walkThrough.x * config.tileSize + 2;
+    player.y = (walkThrough.y + 1) * config.tileSize - player.height / 2;
+    const previousX = player.x;
+    attemptMove(4, 0);
+    check(player.x === previousX + 4 && !collidesWithBlockedTile(player), 'King can physically walk through a thicket tree');
+    const treeFoot = (walkThrough.y + 1) * config.tileSize;
+    for (const behind of [true, false]) {
+      player.y = treeFoot - player.height + (behind ? -8 : 8);
+      updateCamera();
+      const items = collectOverworldDrawables();
+      const treeIndex = items.findIndex(item => item.kind === 'tree' && item.areaId === 'sylvan' && item.col === walkThrough.x && item.row === walkThrough.y);
+      const playerIndex = items.findIndex(item => item.kind === 'player');
+      check(treeIndex >= 0 && (behind ? playerIndex < treeIndex : treeIndex < playerIndex), behind
+        ? 'Canopy draws over the king when he is behind its trunk'
+        : 'King draws in front when he is below the trunk');
+    }
+    enterArea('castleGrounds');
+    const plains = areas.controlledPlains;
+    check(plains.map.every(row => !row.includes('R') && !row.includes('j')), 'Plains have no grey rock squares or old interior walkway');
+    let pathTiles = 0;
+    plains.map.forEach((row, y) => [...row].forEach((tile, x) => {
+      if (tile === 'p') {
+        if (x < plains.width - 3 || ![19, 20].includes(y)) throw new Error('Path extends farther than three Plains tiles');
+        pathTiles += 1;
+      }
+      if (['T', 'W'].includes(tile)) {
+        for (let dy = -1; dy <= 1; dy += 1) {
+          for (let dx = -1; dx <= 1; dx += 1) {
+            if ((dx || dy) && ['T', 'W'].includes(plains.map[y + dy]?.[x + dx])) throw new Error('Plains blocking obstacles still form a clump');
+          }
+        }
+      }
+    }));
+    check(pathTiles === 6 && plains.map[104].includes('F'), 'Plains road is exactly three tiles deep and two wide; palace stays intact');
+    check(true, 'Each Plains obstacle clump leaves only one blocking object');
+    check(currentAreaId === 'castleGrounds' && gameMode === 'area', 'Castle exits directly to the overworld');
+    check(areas.sylvan.height === 68 && areas.azureApex.height === 68 && areas.controlledPlains.height === 136, 'Expanded regions preserve vertical alignment');
+    check(overworld.width * overworld.height / (92 * 96) > 2.95 && overworld.width * overworld.height / (92 * 96) < 3.1, 'Outdoor terrain is approximately three times the original area');
+    check(areas.castleGrounds.map.slice(22).every(row => [...row].filter(tile => tile === '=').length === 4), 'Stone bridge keeps its four-tile width throughout the nine-tile river crossing');
+    check(resolveLandscapeTile('G') === 'T' && resolveLandscapeTile('U') === 'X', 'Both villages start locked');
+    for (const [region, gate] of [['sylvan', 'G'], ['azureApex', 'U']]) {
+      const enemies = ordinaryEnemies(areas[region]);
+      enemies.slice(0, -1).forEach(enemy => { enemy.restored = true; });
+      check(!canEnterLandscapeArea(region === 'sylvan' ? 'sylvanVillage' : 'azureVillage'), `${region}: one remaining ordinary enemy keeps the village locked`);
+      restoreMapEnemy(enemies.at(-1), region);
+      check(!regionalBossStates[region].defeated && !isBlockedTile(gate), `${region}: final ordinary restoration opens access before guardian defeat`);
+    }
+    const key = (x, y) => `${x},${y}`;
+    const start = [73, 13];
+    const queue = [start];
+    const parents = new Map([[key(...start), null]]);
+    for (let i = 0; i < queue.length; i += 1) {
+      const [x, y] = queue[i];
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const next = [x + dx, y + dy];
+        if (parents.has(key(...next)) || worldRectBlocked({
+          x: (next[0] + 0.5) * config.tileSize - player.width / 2,
+          y: (next[1] + 1) * config.tileSize - player.height / 2,
+          width: player.width, height: player.height
+        })) continue;
+        parents.set(key(...next), [x, y]);
+        queue.push(next);
+      }
+    }
+    let portals = 0;
+    for (const id of ['sylvan', 'azureApex', 'controlledPlains']) {
+      const area = areas[id];
+      for (const enemy of ordinaryEnemies(area)) {
+        const x = area.world.x + Math.floor(enemy.spawnX / config.tileSize);
+        const y = area.world.y + Math.floor(enemy.spawnY / config.tileSize);
+        if (!parents.has(key(x, y)) && !parents.has(key(x, y - 1))) throw new Error(`Unreachable controlled enemy: ${enemy.id} at ${x},${y}`);
+      }
+    }
+    check(true, 'All ordinary enemies spawn within reach of the full player hitbox');
+    check(parents.has(key(areas.azureVillage.world.x + 34, areas.azureVillage.world.y + 4)), 'Higher terrace and mountain clouds are reachable through the village');
+    check(parents.has(key(areas.azureApex.world.x + 31, areas.azureApex.world.y + 58)), 'Hot spring is reachable on foot');
+    for (const id of overworld.regions) {
+      const area = areas[id];
+      for (const portal of area.portals || []) {
+        check(parents.has(key(area.world.x + portal.x, area.world.y + portal.y)), `${portal.label}: entrance reachable from castle grounds`);
+        enterArea(id);
+        player.x = portal.x * config.tileSize + (config.tileSize - player.width) / 2;
+        player.y = (portal.y + 1) * config.tileSize - player.height / 2;
+        updateInteractionPrompt();
+        if (promptMode !== 'world-portal') throw new Error(`Missing entrance prompt: ${portal.label}`);
+        usePrompt();
+        if (currentAreaId !== portal.target || collidesWithBlockedTile(player)) throw new Error(`Unsafe interior arrival: ${portal.label}`);
+        const interior = areas[currentAreaId];
+        if (interior.layer !== 2) throw new Error(`Wrong building layer: ${portal.label}`);
+        if (interior.houseInterior) {
+          player.x = 5 * config.tileSize + (config.tileSize - player.width) / 2;
+          player.y = 8 * config.tileSize + (config.tileSize - player.height) / 2;
+        } else {
+          const exitRow = interior.map.findIndex(row => row.includes('E'));
+          player.x = interior.map[exitRow].indexOf('E') * config.tileSize + (config.tileSize - player.width) / 2;
+          player.y = exitRow * config.tileSize + (config.tileSize - player.height) / 2;
+        }
+        leaveArea();
+        if (currentAreaId !== id || collidesWithBlockedTile(player)) throw new Error(`Unsafe exterior return: ${portal.label}`);
+        portals += 1;
+      }
+    }
+    check(portals === 55, 'All 53 homes and both castles enter and exit safely');
+    const walkTo = target => {
+      if (!parents.has(key(...target))) throw new Error(`No walking route to ${target}`);
+      const route = [];
+      for (let cell = target; cell; cell = parents.get(key(...cell))) route.unshift(cell);
+      enterArea('castleGrounds');
+      player.x = start[0] * config.tileSize + (config.tileSize - player.width) / 2;
+      player.y = (start[1] + 1) * config.tileSize - player.height / 2;
+      const crossed = new Set([currentAreaId]);
+      for (const [x, y] of route) {
+        let steps = 0;
+        for (;;) {
+          const area = areas[currentAreaId];
+          const dx = (x - area.world.x + 0.5) * config.tileSize - player.x - player.width / 2;
+          const dy = (y - area.world.y + 1) * config.tileSize - player.y - player.height / 2;
+          if (Math.abs(dx) + Math.abs(dy) < 0.01) break;
+          if (++steps > 40) throw new Error(`Movement stuck at ${x},${y} in ${currentAreaId}`);
+          attemptMove(Math.sign(dx) * Math.min(Math.abs(dx), 5), Math.sign(dy) * Math.min(Math.abs(dy), 5));
+          crossed.add(currentAreaId);
+        }
+      }
+      return crossed;
+    };
+    const sylvanResident = areas.sylvan.enemies[0];
+    sylvanResident.restored = true;
+    initializeVillageResident(sylvanResident);
+    const crossed = walkTo([70, 104]);
+    check(crossed.has('sylvan') && currentAreaId === 'azureApex', 'Walking crosses the bridge, Sylvan, and Azure without a selector');
+    check(sylvanResident.relocated && sylvanResident.restored, 'Crossing a regional boundary preserves restoration and relocates the resident');
+    walkTo([8, 140]);
+    check(currentAreaId === 'controlledPlains', 'Controlled Plains is reachable on foot beside the stacked regions');
+    for (const region of ['sylvan', 'azureApex']) {
+      check(ordinaryEnemies(areas[region]).every(enemy => !tileIsEmbeddedVillage(areas[region], Math.floor(enemy.spawnX / config.tileSize), Math.floor(enemy.spawnY / config.tileSize))), `${region}: controlled enemies spawn outside village grounds`);
+    }
+    enterArea('castleGrounds');
+    player.x = 67 * config.tileSize + (config.tileSize - player.width) / 2;
+    player.y = 21 * config.tileSize - player.height / 2;
+    const y = player.y;
+    for (let i = 0; i < 20; i += 1) attemptMove(0, 5);
+    check(currentAreaId === 'castleGrounds' && player.y < y + config.tileSize, 'River blocks travel outside the bridge');
+    const cliff = areas.azureVillage;
+    for (let row = 0; row < cliff.height; row += 1) {
+      for (let col = 0; col < cliff.width; col += 1) {
+        if (col < 2 || col >= cliff.width - 2 || row < 2 || row >= cliff.height - 2) {
+          const tile = cliff.map[row][col];
+          if (tile !== 'U' && !isBlockedTile(tile)) throw new Error('Cliff can be climbed outside a staircase');
+        }
+      }
+    }
+    check(true, 'Azure cliff stays impassable everywhere except the designated stairs');
+    enterArea('azureApex');
+    player.x = 31 * config.tileSize;
+    player.y = 58 * config.tileSize;
+    playerState.health = 5;
+    updateWorldEnvironment();
+    environmentState.springSince = performance.now() - 1500;
+    updateWorldEnvironment();
+    check(playerState.health === 8, 'Hot spring restores health over elapsed time');
+    environmentState.springSince = performance.now() - 100000;
+    updateWorldEnvironment();
+    check(playerState.health === playerState.maxHealth, 'Hot spring healing stops at maximum health');
+    player.x = 20 * config.tileSize;
+    updateWorldEnvironment();
+    check(environmentState.springSince === null, 'Healing timer clears outside the spring');
+    enterArea('azureVillage');
+    player.x = 34 * config.tileSize;
+    player.y = 4 * config.tileSize;
+    updateWorldEnvironment();
+    environmentState.cloudSince = performance.now() - 700;
+    updateWorldEnvironment();
+    check(currentAreaId === 'azureMountain' && !collidesWithBlockedTile(player), 'Walking into the clouds enters Azure Mountain safely');
+    returnToExterior();
+    check(currentAreaId === 'azureVillage' && !collidesWithBlockedTile(player), 'Mountain exit returns safely below the clouds');
+    enterArea('sylvan');
+    player.x = 8 * config.tileSize;
+    player.y = 10 * config.tileSize;
+    check(nearbySign()?.[1] === 'W lc me to Sylvan', 'Weathered welcome sign can be read');
+    resetGame();
+    check(currentAreaId === 'pristineCastle' && !playerState.hasStaff && !sylvanResident.restored, 'New Game resets progression and starts inside the castle');
+    check(isBlockedTile('G') && isBlockedTile('U') && !canEnterLandscapeArea('azureMountain'), 'New Game relocks both villages and the mountain');
+    return passed;
+  });
+  console.log(results.join('\n'));
+  const scenes = [
+    ['bridge', 'castleGrounds', 70, 26], ['region-seam', 'sylvan', 4, 66],
+    ['village', 'sylvanVillage', 16, 10], ['palace-exterior', 'controlledPlains', 8, 109],
+    ['house', 'sylvanVillageHouse1', 5, 7], ['thicket', 'sylvan', 76, 28],
+    ['cliff', 'azureVillage', 22, 28], ['clouds', 'azureVillage', 34, 4],
+    ['spring', 'azureApex', 31, 58], ['walkway', 'controlledPlains', 54, 28],
+    ['sign', 'sylvan', 8, 11], ['village-edge', 'sylvanVillage', 2, 4], ['mountain', 'azureMountain', 5, 23]
+  ];
+  for (const [name, id, x, y] of scenes) {
+    await page.evaluate(({ id, x, y }) => {
+      enterArea(id);
+      showScreen('game');
+      player.x = x * config.tileSize;
+      player.y = y * config.tileSize;
+      updateCamera(); drawWorld();
+    }, { id, x, y });
+    // Screenshot pixels remain readable when file:// sprites taint the game canvas.
+    const shot = await page.locator('#game-canvas').screenshot();
+    const colors = await page.evaluate(async dataUrl => {
+      const image = new Image();
+      image.src = dataUrl;
+      await image.decode();
+      const probe = document.createElement('canvas');
+      probe.width = image.width; probe.height = image.height;
+      const context = probe.getContext('2d');
+      context.drawImage(image, 0, 0);
+      const pixels = context.getImageData(0, 0, probe.width, probe.height).data;
+      const colors = new Set();
+      for (let i = 0; i < pixels.length; i += 128) colors.add(`${pixels[i]},${pixels[i + 1]},${pixels[i + 2]}`);
+      return colors.size;
+    }, `data:image/png;base64,${shot.toString('base64')}`);
+    assert.ok(colors >= 10, 'World canvas is nonblank');
+    await page.screenshot({ path: path.join(os.tmpdir(), `split-path-overworld-${name}-${label}.png`) });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${label}: no horizontal overflow`);
+  }
+  await page.evaluate(() => {
+    ordinaryEnemies(areas.azureApex).forEach(enemy => { enemy.restored = true; });
+    enterArea('azureVillage');
+    player.x = 22 * config.tileSize; player.y = 28 * config.tileSize;
+    updateCamera(); drawWorld();
+  });
+  await page.screenshot({ path: path.join(os.tmpdir(), `split-path-overworld-stairs-open-${label}.png`) });
+  await page.evaluate(() => { enterArea('azureMountain'); });
+  await page.keyboard.press('m');
+  assert.equal(await page.evaluate(() => currentAreaId), 'azureMountain', 'M no longer bypasses doors');
+  assert.deepEqual(errors, [], 'No overworld runtime errors');
+  console.log(`${label}: connected overworld screenshots and canvas pixels verified.`);
+}
+
 async function verifyCastleRoute(page, label) {
   await page.evaluate(() => {
     cancelAnimationFrame(animationFrameId);
@@ -205,7 +475,7 @@ async function verifyCastleRoute(page, label) {
   await walk('arrowdown', 200);
   assert.equal(await page.evaluate(() => promptMode), 'leave-area', `${label}: doorway is reachable`);
   await page.keyboard.press('z');
-  assert.equal(await page.evaluate(() => gameMode), 'kingdom', `${label}: Z exits to the Kingdom Map`);
+  assert.equal(await page.evaluate(() => currentAreaId), 'castleGrounds', `${label}: Z exits to the castle grounds`);
   await page.evaluate(() => resetGame());
   assert.equal(await page.evaluate(() => playerState.hasStaff || castleState.exitCleared), false, `${label}: reset restores castle progression`);
   console.log(`${label}: movement, staff pickup, throne sitting/standing, rubble, exit and reset pass.`);
@@ -233,8 +503,10 @@ async function verifyGuardianProgression(page) {
     check(currentAreaId === 'controlledPalace' && !collidesWithBlockedTile(player), 'Downstairs returns to the lower staircase');
     enterArea('palaceUpper');
     leaveArea();
-    const palaceNode = kingdomMap.nodes.find(node => node.areaId === 'controlledPalace');
-    check(player.x === palaceNode.x - player.width / 2, 'Upper floor exits to the palace Kingdom Map node');
+    check(currentAreaId === 'palaceUpper', 'Upper floor cannot bypass the stairs to leave the palace');
+    enterArea('controlledPalace');
+    returnToExterior();
+    check(currentAreaId === 'controlledPlains' && !collidesWithBlockedTile(player), 'Palace ground floor returns safely to its overworld entrance');
 
     enterArea('sylvan');
     let enemy = ordinaryEnemies(areas.sylvan).find(candidate => candidate.visual === 'flying');
@@ -321,7 +593,7 @@ async function verifyGuardianProgression(page) {
         moveEnemies();
         check(candidate.x > x, `${region}: released ${candidate.visual} can wander`);
       });
-      leaveArea();
+      finishAreaDeparture();
       enterArea(region);
       check(restored.every(candidate => !candidate.relocated), `${region}: boss residents stay in their region after travel`);
       const village = villageAreaForSource(region);
@@ -536,6 +808,16 @@ async function verifyScalingAndDagger(page) {
     browser = await playwright.chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || 'msedge' });
     const origin = `http://127.0.0.1:${server.address().port}`;
     const desktop = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    if (process.argv.includes('--overworld-only')) {
+      await desktop.goto(origin + '/index.html');
+      await desktop.waitForFunction(() => Object.values(sylvanSprites).every(image => image.complete));
+      await verifyOverworld(desktop, 'desktop');
+      const mobile = await browser.newPage({ viewport: { width: 390, height: 844 } });
+      await mobile.goto(pathToFileURL(path.join(root, 'index.html')).href);
+      await mobile.waitForFunction(() => Object.values(sylvanSprites).every(image => image.complete));
+      await verifyOverworld(mobile, 'mobile-local');
+      return;
+    }
     const current = await inspect(desktop, origin + '/index.html');
     console.log(current.checks.join('\n'));
     await desktop.evaluate(() => {
@@ -577,6 +859,7 @@ async function verifyScalingAndDagger(page) {
     await verifyGuardianProgression(desktop);
     await verifyBossVisuals(desktop, 'desktop', true);
     await verifyScalingAndDagger(desktop);
+    await verifyOverworld(desktop, 'desktop');
     if (baseline) {
       const previous = await inspect(await browser.newPage({ viewport: { width: 1280, height: 900 } }), origin + '/baseline/index.html');
       assert.deepEqual(current.initial, previous.initial, 'Initial map and enemy data must match baseline');
@@ -596,6 +879,7 @@ async function verifyScalingAndDagger(page) {
     console.log('Direct local-file play and mobile startup pass with no runtime errors.');
     await verifyCastleRoute(local, 'mobile-local');
     await verifyBossVisuals(local, 'mobile-local');
+    await verifyOverworld(local, 'mobile-local');
   } finally {
     if (browser) await browser.close();
     await new Promise(resolve => server.close(resolve));

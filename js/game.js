@@ -91,7 +91,7 @@ function nextStory() {
 }
 
 function updateHud() {
-  const locationName = gameMode === "kingdom" ? "Kingdom Map" : areas[currentAreaId].name;
+  const locationName = areas[currentAreaId].name;
   document.querySelector("#divine-points").textContent = `DP: ${playerState.divinePoints}`;
   document.querySelector("#player-stats").textContent = `${locationName} | Power ${playerState.restorePower} | Guard ${playerState.defense} | Health ${playerState.health}/${playerState.maxHealth}`;
   document.querySelector("#upgrade-points").textContent = `DP: ${playerState.divinePoints}`;
@@ -249,7 +249,7 @@ function showLoseScreen() {
 function revivePlayerAtAreaStart() {
   const area = areas[currentAreaId];
   playerState.health = playerState.maxHealth;
-  player.x = area.start.x * config.tileSize + 6;
+  player.x = area.start.x * config.tileSize + (config.tileSize - player.width) / 2;
   player.y = area.start.y * config.tileSize + 2;
   area.enemies.forEach((enemy) => {
     if (enemy.chasing) {
@@ -602,7 +602,6 @@ window.addEventListener("keydown", (event) => {
     showTemporaryPrompt("Dagger test mode enabled. Defend instantly restores enemies.");
   }
   if ((key === "z" || key === "enter") && !event.repeat) usePrompt();
-  if (key === "m" && currentScreen === "game" && gameMode === "area" && (currentAreaId !== "pristineCastle" || castleState.exitCleared)) leaveArea();
   if (key === "u" && currentScreen === "game") {
     updateUpgradeButtons();
     showScreen("upgrades");
@@ -620,6 +619,7 @@ window.addEventListener("keydown", (event) => {
 
 window.addEventListener("keyup", (event) => keys.delete(event.key.toLowerCase()));
 
+initializeOverworld();
 initializeAreaRockDecorations();
 initializeAreaEnemies();
 initializeBoss();
