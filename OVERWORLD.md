@@ -84,9 +84,11 @@ buildings and the outer world boundary remain intact.
 
 Z or Enter activates doors and interior exits. Outdoor arrivals place the King
 below the same entrance, using his full hitbox for clearance. The Pristine Castle
-staff and rubble requirements still apply. The upper palace floor cannot bypass
-the staircase to reach the exterior. Holding an interaction key does not cause
-repeated door transitions.
+staff and rubble requirements still apply. E or M returns from any interior to
+its exterior entrance, including directly from Kyle's upstairs chamber to the
+palace entrance. These keys do nothing on outdoor layer 1. A future basement
+can reuse `exteriorDoor` or chain `exteriorParent` metadata without new key logic.
+Holding an interaction key does not cause repeated door transitions.
 
 ## Progression And Actors
 

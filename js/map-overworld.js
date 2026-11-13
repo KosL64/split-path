@@ -62,6 +62,7 @@ function initializeOverworld() {
   areas.controlledPalace.layer = 2;
   areas.controlledPalace.exteriorDoor = { areaId: "controlledPlains", x: 8, y: 108 };
   areas.palaceUpper.layer = 3;
+  areas.palaceUpper.exteriorParent = "controlledPalace";
   ["sylvanVillage", "azureVillage"].forEach(id => {
     const village = areas[id];
     const exteriorGrid = village.map.map(row => [...row]);
@@ -165,6 +166,30 @@ function returnToExterior() {
   enterArea(door.areaId);
   player.x = door.x * config.tileSize + (config.tileSize - player.width) / 2;
   player.y = (door.y + 1) * config.tileSize - player.height / 2;
+  updateCamera();
+}
+
+function quickExitInterior() {
+  if (currentScreen !== "game" || areas[currentAreaId].layer === 1) return;
+  if (currentAreaId === "pristineCastle" && !castleState.exitCleared) return;
+  let area = areas[currentAreaId];
+  const visited = new Set();
+  while (!area.exteriorDoor && area.exteriorParent && !visited.has(area)) {
+    visited.add(area);
+    area = areas[area.exteriorParent];
+    if (!area) return;
+  }
+  const door = area.exteriorDoor;
+  if (!door || !canEnterLandscapeArea(door.areaId)) return;
+  const destination = areas[door.areaId];
+  const x = door.x * config.tileSize + (config.tileSize - player.width) / 2;
+  const y = (door.y + 1) * config.tileSize - player.height / 2;
+  if (destination.world && worldRectBlocked({ ...player, x: x + destination.world.x * config.tileSize, y: y + destination.world.y * config.tileSize })) return;
+  standFromThrone();
+  finishAreaDeparture();
+  enterArea(door.areaId);
+  player.x = x;
+  player.y = y;
   updateCamera();
 }
 

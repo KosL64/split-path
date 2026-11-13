@@ -466,6 +466,51 @@ function buyUpgrade(type) {
   if (type === "dodge") { playerState.defense += 3; document.querySelector("#upgrade-message").textContent = "Dodge learned: Defense rises by 3; 7% chance to avoid attacks."; }
   updateUpgradeButtons();
 }
+function initializeDivineTree() {
+  const tree = document.querySelector(".divine-tree");
+  const buttons = new Map([...tree.querySelectorAll("[data-upgrade]")].map(button => [button.dataset.upgrade, button]));
+  const base = tree.querySelector(".node-base");
+  for (const button of buttons.values()) {
+    const positionTooltip = () => {
+      const bounds = button.getBoundingClientRect();
+      const left = clamp(bounds.left + bounds.width / 2 - 95, 12, innerWidth - 202);
+      button.style.setProperty("--tooltip-x", `${left - bounds.left}px`);
+    };
+    button.addEventListener("pointerenter", positionTooltip);
+    button.addEventListener("focus", positionTooltip);
+  }
+  const element = (className) => {
+    const node = document.createElement("div");
+    node.className = className;
+    return node;
+  };
+  const paths = element("divine-paths");
+  for (const path of ["damage", "health", "defense"]) {
+    const group = element(`divine-path divine-path-${path}`);
+    const shared = element("upgrade-shared");
+    const branches = element("path-branches");
+    for (const [id, definition] of Object.entries(upgradeDefinitions)) {
+      if (definition.path !== path || definition.tier !== 2) continue;
+      const branch = element("upgrade-branch");
+      branch.dataset.parent = id;
+      const children = element("upgrade-children");
+      for (const [childId, child] of Object.entries(upgradeDefinitions)) {
+        if (child.requires === id) children.append(buttons.get(childId));
+      }
+      branch.append(children, element("upgrade-stem"), buttons.get(id));
+      branches.append(branch);
+    }
+    for (const [id, definition] of Object.entries(upgradeDefinitions)) {
+      if (definition.path === path && definition.requiresAny) shared.append(buttons.get(id));
+    }
+    group.append(shared, branches, element("upgrade-fork"), buttons.get(path));
+    paths.append(group);
+  }
+  const baseRow = element("divine-base");
+  baseRow.append(base);
+  tree.replaceChildren(paths, element("divine-base-stem"), baseRow);
+}
+
 function updateUpgradeButtons() {
   document.querySelectorAll("[data-upgrade]").forEach((button) => {
     const upgrade = upgradeDefinitions[button.dataset.upgrade];
@@ -575,6 +620,7 @@ document.querySelector("#heal-action").addEventListener("click", healAction);
 document.querySelector("#heal-now-action").addEventListener("click", useHeal);
 document.querySelector("#strengthen-attack-action").addEventListener("click", () => strengthenAction("attack"));
 document.querySelector("#strengthen-defense-action").addEventListener("click", () => strengthenAction("defense"));
+initializeDivineTree();
 document.querySelectorAll("[data-upgrade]").forEach((button) => {
   button.addEventListener("click", () => buyUpgrade(button.dataset.upgrade));
 });
@@ -594,6 +640,15 @@ window.addEventListener("keydown", (event) => {
 
   if (currentScreen === "lose" && (key === "z" || key === " ")) {
     revivePlayerAtAreaStart();
+    return;
+  }
+
+  if (currentScreen === "game" && !event.repeat && (key === "enter" || key === " ") && dismissDialogue()) {
+    event.preventDefault();
+    return;
+  }
+  if (currentScreen === "game" && !event.repeat && (key === "e" || key === "m")) {
+    quickExitInterior();
     return;
   }
 

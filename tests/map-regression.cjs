@@ -419,7 +419,7 @@ async function verifyOverworld(page, label) {
   await page.screenshot({ path: path.join(os.tmpdir(), `split-path-overworld-stairs-open-${label}.png`) });
   await page.evaluate(() => { enterArea('azureMountain'); });
   await page.keyboard.press('m');
-  assert.equal(await page.evaluate(() => currentAreaId), 'azureMountain', 'M no longer bypasses doors');
+  assert.equal(await page.evaluate(() => currentAreaId), 'azureVillage', 'M returns from the mountain to its exterior entrance');
   assert.deepEqual(errors, [], 'No overworld runtime errors');
   console.log(`${label}: connected overworld screenshots and canvas pixels verified.`);
 }
@@ -893,6 +893,145 @@ async function verifyScalingAndDagger(page) {
   console.log('Dagger keyboard sequence, all enemy types, rewards, boss progression and reset pass.');
 }
 
+async function verifyLatestRequests(page, label) {
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  const spawns = await page.evaluate(() => {
+    const positions = [];
+    const originalRandom = Math.random;
+    try {
+      for (const random of [0, 0.25, 0.5, 0.99]) {
+        resetGame();
+        showScreen('game');
+        enterArea('sylvan');
+        ordinaryEnemies(areas.sylvan).forEach(enemy => { enemy.restored = true; });
+        Math.random = () => random;
+        revealRegionalBosses();
+        const guardian = areas.sylvan.enemies.find(enemy => enemy.regionBoss);
+        if (!guardian || collidesWithBlockedTile(guardian)) throw new Error('Guardian needs a full-hitbox safe spawn');
+        const x = Math.floor(guardian.x / config.tileSize), y = Math.floor(guardian.y / config.tileSize);
+        const forest = landscape.thicket;
+        if (x >= forest.x - 1 && x < forest.x + forest.width + 1 && y >= forest.y - 1 && y < forest.y + forest.height + 1)
+          throw new Error('Sylvan guardian spawned in the thicket');
+        if (tileIsEmbeddedVillage(areas.sylvan, x, y) || !landscapeSpawnReachable(areas.sylvan, x, y))
+          throw new Error('Sylvan guardian spawned in a village or unreachable pocket');
+        positions.push(`${x},${y}`);
+      }
+    } finally { Math.random = originalRandom; }
+    resetGame();
+    showScreen('game');
+    return positions;
+  });
+  assert.ok(new Set(spawns).size > 1, `${label}: guardian spawn is randomized across field clearings`);
+  for (const key of ['e', 'm']) {
+    await page.keyboard.press(key);
+    assert.equal(await page.evaluate(() => currentAreaId), 'pristineCastle', 'Quick exit preserves the locked castle tutorial');
+  }
+  const interiors = await page.evaluate(() => {
+    castleState.exitCleared = true;
+    ordinaryEnemies(areas.sylvan).forEach(enemy => { enemy.restored = true; });
+    ordinaryEnemies(areas.azureApex).forEach(enemy => { enemy.restored = true; });
+    return Object.keys(areas).filter(id => areas[id].layer > 1 && (areas[id].exteriorDoor || areas[id].exteriorParent));
+  });
+  for (const id of interiors) {
+    for (const key of ['e', 'm']) {
+      const expected = await page.evaluate(id => {
+        showScreen('game');
+        enterArea(id);
+        let area = areas[id];
+        while (!area.exteriorDoor) area = areas[area.exteriorParent];
+        return area.exteriorDoor;
+      }, id);
+      await page.keyboard.press(key);
+      const actual = await page.evaluate(() => ({ id: currentAreaId, x: player.x, y: player.y, blocked: collidesWithBlockedTile(player) }));
+      assert.equal(actual.id, expected.areaId, `${id}: ${key} reaches the exterior`);
+      assert.equal(actual.x, expected.x * 48 + 2, `${id}: ${key} returns at its own entrance`);
+      assert.equal(actual.blocked, false, `${id}: ${key} has safe arrival clearance`);
+    }
+  }
+  await page.evaluate(() => { enterArea('sylvan'); });
+  await page.keyboard.press('m');
+  assert.equal(await page.evaluate(() => currentAreaId), 'sylvan', 'Quick exit does not teleport the exterior player');
+  await page.evaluate(() => {
+    areas.testBasement = { ...areas.palaceUpper, layer: -1, exteriorParent: 'palaceUpper' };
+    enterArea('testBasement');
+  });
+  await page.keyboard.press('e');
+  assert.equal(await page.evaluate(() => currentAreaId), 'controlledPlains', 'Return-chain metadata supports a future basement');
+  await page.evaluate(() => {
+    delete areas.testBasement;
+    resetGame();
+    showScreen('game');
+    player.x = 12 * config.tileSize + 2;
+    player.y = 4 * config.tileSize + 2;
+    updateInteractionPrompt();
+    usePrompt();
+  });
+  for (const key of ['Enter', 'Space']) {
+    await page.evaluate(() => showTemporaryPrompt('Temporary message test', 10000));
+    await page.keyboard.press(key);
+    assert.equal(await page.evaluate(() => temporaryMessageActive || castleState.sitting), false, 'Dismissal cannot also sit on the throne');
+    assert.equal(await page.evaluate(() => promptMode), 'castle-throne', 'Dismissal restores the interaction prompt');
+  }
+  await page.keyboard.press('Space');
+  assert.equal(await page.evaluate(() => promptMode), 'castle-throne', 'Space preserves ordinary interaction prompts');
+  await page.evaluate(() => {
+    enterArea('sylvan');
+    activeEnemy = ordinaryEnemies(areas.sylvan)[0];
+    activeEnemy.restored = true;
+    activeEnemy.x = player.x + 35;
+    activeEnemy.y = player.y;
+    promptMode = 'talk';
+    talkToNpc();
+  });
+  await page.keyboard.press('Enter');
+  assert.equal(await page.evaluate(() => talkingResident), null, 'Dismissing dialogue releases the paused NPC');
+  await page.evaluate(() => {
+    enterArea('palaceUpper');
+    activeEnemy = areas.palaceUpper.enemies[0];
+    beginBossDialogue();
+  });
+  await page.keyboard.press('Space');
+  assert.equal(await page.evaluate(() => bossDialogueIndex), 1, 'Space advances scripted boss dialogue without losing the encounter');
+  await page.evaluate(() => {
+    resetGame();
+    showScreen('game');
+    playerState.divinePoints = 1000;
+    updateUpgradeButtons();
+    showScreen('upgrades');
+  });
+  await page.locator('[data-upgrade="damage"]').click();
+  await page.locator('[data-upgrade="greaterDamage"]').click();
+  await page.locator('[data-upgrade="critRate"]').click();
+  assert.equal(await page.evaluate(() => playerState.restorePower), 18, 'Reparented tree buttons retain purchase handlers');
+  const layout = await page.evaluate(() => {
+    const nodes = [...document.querySelectorAll('[data-upgrade]')];
+    return {
+      count: nodes.length,
+      unique: new Set(nodes.map(node => node.dataset.upgrade)).size,
+      overflow: document.documentElement.scrollWidth > innerWidth,
+      outside: [...document.querySelectorAll('#upgrade-screen *')].filter(node => node.getBoundingClientRect().right > innerWidth + 1).map(node => `${node.className}: ${node.getBoundingClientRect().right}`),
+      parents: [...document.querySelectorAll('.upgrade-branch')].map(branch => ({
+        id: branch.dataset.parent, children: [...branch.querySelectorAll('.upgrade-children [data-upgrade]')].map(node => node.dataset.upgrade)
+      })),
+      clipped: nodes.filter(node => [...node.querySelectorAll('strong, span, small')].some(text => {
+        const bounds = text.getBoundingClientRect(), parent = node.getBoundingClientRect();
+        return text.scrollWidth > text.clientWidth + 1 || bounds.left < parent.left || bounds.right > parent.right
+          || bounds.top < parent.top || bounds.bottom > parent.bottom;
+      })).map(node => node.dataset.upgrade)
+    };
+  });
+  assert.equal(layout.count, 18);
+  assert.equal(layout.unique, 18);
+  await page.locator('.upgrade-panel').screenshot({ path: path.join(os.tmpdir(), `split-path-divine-tree-${label}.png`) });
+  assert.equal(layout.overflow, false, `${label}: upgrade layout fits the viewport ${layout.outside.join(', ')}`);
+  assert.deepEqual(layout.clipped, [], `${label}: upgrade labels fit their nodes`);
+  assert.deepEqual(layout.parents.find(branch => branch.id === 'greaterHealth').children, ['higherHealth', 'strengthen', 'healOverTime']);
+  assert.deepEqual(errors, []);
+  await page.evaluate(() => { resetGame(); showScreen('game'); });
+  console.log(`${label}: field spawns, all ${interiors.length} interior quick exits, dismissible messages and branched Divine Path pass.`);
+}
+
 (async () => {
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
@@ -914,6 +1053,14 @@ async function verifyScalingAndDagger(page) {
     browser = await playwright.chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || 'msedge' });
     const origin = `http://127.0.0.1:${server.address().port}`;
     const desktop = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    if (process.argv.includes('--latest-only')) {
+      await desktop.goto(origin + '/index.html');
+      await verifyLatestRequests(desktop, 'desktop');
+      const mobile = await browser.newPage({ viewport: { width: 390, height: 844 } });
+      await mobile.goto(pathToFileURL(path.join(root, 'index.html')).href);
+      await verifyLatestRequests(mobile, 'mobile-local');
+      return;
+    }
     if (process.argv.includes('--overworld-only')) {
       await desktop.goto(origin + '/index.html');
       await desktop.waitForFunction(() => Object.values(sylvanSprites).every(image => image.complete));
@@ -967,6 +1114,7 @@ async function verifyScalingAndDagger(page) {
     await verifyBossVisuals(desktop, 'desktop', true);
     await verifyScalingAndDagger(desktop);
     await verifyOverworld(desktop, 'desktop');
+    await verifyLatestRequests(desktop, 'desktop');
     await desktop.goto(origin + '/index.html');
     await verifyTitleAndStory(desktop, 'desktop');
     if (baseline) {
@@ -988,6 +1136,7 @@ async function verifyScalingAndDagger(page) {
     await verifyCastleRoute(local, 'mobile-local');
     await verifyBossVisuals(local, 'mobile-local');
     await verifyOverworld(local, 'mobile-local');
+    await verifyLatestRequests(local, 'mobile-local');
   } finally {
     if (browser) await browser.close();
     await new Promise(resolve => server.close(resolve));

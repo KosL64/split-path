@@ -704,6 +704,38 @@ meter {
 @keyframes heal-glow { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
 @media (prefers-reduced-motion: reduce) { .battle-stage.attack-effect::after, .battle-stage.defend-effect .player-cube, .battle-stage.heal-effect .player-cube { animation-duration: .01ms; } }
 
-.tree-row-tier3 { grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; }
-.node-tier3 { min-height: 112px; font-size: .82rem; }
-@media (max-width: 640px) { .tree-row-tier3 { grid-template-columns: 1fr; } }
+.upgrade-panel { width: min(100%, 1260px); min-width: 0; }
+.divine-tree { max-width: 1200px; }
+.divine-tree .tree-node[data-tooltip]::after { display: none; left: var(--tooltip-x, 0px); transform: none; }
+.divine-tree .tree-node[data-tooltip]:hover::after,
+.divine-tree .tree-node[data-tooltip]:focus-visible::after { display: block; }
+.divine-paths { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+.divine-path { display: flex; flex-direction: column; align-items: center; min-width: 0; }
+.path-branches { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; width: 100%; flex: 1; }
+.upgrade-branch { display: flex; flex-direction: column; align-items: center; justify-content: end; min-width: 0; }
+.upgrade-children { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; align-items: end; justify-items: center; width: 100%; }
+.upgrade-children > :only-child { grid-column: 1 / -1; }
+.upgrade-children > :last-child:nth-child(3) { grid-column: 1 / -1; }
+.divine-tree .node-tier3 { width: 100%; max-width: 92px; min-height: 100px; aspect-ratio: auto; padding: 8px 4px; font-size: .75rem; }
+.divine-tree .node-tier3 strong { width: 24px; height: 24px; font-size: 1rem; }
+.divine-tree .node-tier3 span { font-size: .75rem; overflow-wrap: anywhere; }
+.divine-tree .node-small { width: 100%; max-width: 124px; }
+.upgrade-stem { height: 28px; width: 2px; background: var(--line); }
+.upgrade-children:not(:empty) { position: relative; padding-bottom: 12px; }
+.upgrade-children:not(:empty)::after { content: ""; position: absolute; bottom: 0; left: 25%; right: 25%; height: 2px; background: var(--line); }
+.upgrade-fork { width: 52%; height: 32px; border-top: 2px solid var(--line); position: relative; margin-top: 10px; }
+.upgrade-fork::after { content: ""; position: absolute; left: 50%; top: 0; height: 100%; width: 2px; background: var(--line); }
+.upgrade-shared { min-height: 132px; display: flex; justify-content: center; align-items: start; width: 100%; position: relative; }
+.upgrade-shared:not(:empty)::after { content: ""; position: absolute; left: 50%; top: 100px; height: 30px; width: 2px; background: var(--line); }
+.divine-base { display: flex; justify-content: center; }
+.divine-base-stem { height: 36px; width: 66%; justify-self: center; border-top: 2px solid var(--line); position: relative; }
+.divine-base-stem::after { content: ""; position: absolute; top: 0; left: 50%; width: 2px; height: 100%; background: var(--line); }
+@media (max-width: 1000px) {
+  .divine-paths { grid-template-columns: 1fr; gap: 40px; }
+  .divine-path { max-width: 440px; width: 100%; justify-self: center; }
+  .upgrade-shared:empty { display: none; }
+  .divine-base-stem { width: 2px; background: var(--line); border: 0; }
+}
+@media (max-width: 480px) {
+  .divine-path-health .upgrade-children { grid-template-columns: 1fr; }
+}

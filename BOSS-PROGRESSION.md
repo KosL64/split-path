@@ -28,6 +28,21 @@ Contact opens battle with `A guardian has appeared.` No interaction key is neede
 Leaving an area or reviving clears pursuit. Kyle retains his separate dialogue
 and encounter upstairs.
 
+Home-region guardians now select a random reachable clearing with full-body
+clearance and room in all four directions. Sylvan's guardian excludes the
+thicket and village grounds, and therefore appears in the open field portion.
+
+Enter or Space dismisses temporary exploration messages and NPC dialogue,
+releasing paused residents and restoring the nearby interaction prompt. During
+Kyle's scripted conversation these keys advance one line, preserving the battle
+sequence. Z continues to work for interactions and scripted dialogue.
+
+The Divine Path groups tier-three choices over their required tier-two node.
+Dodge is shared above both defense branches. Existing costs, branch locks and
+ability effects are retained. Narrow screens stack the three complete paths.
+Azure Village's new dialogue is intentionally left as the classroom exercise in
+`STUDENT-EXERCISE.md`.
+
 Guardians have twice the ordinary attack, defense, and health for their level.
 
 | Guardian | Displayed Level | Health | Attack | Defense |

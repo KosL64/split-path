@@ -4,6 +4,8 @@ let gameMode = "area";
 let currentAreaId = "sylvan";
 let contactLockedUntil = 0;
 let dialogueUntil = 0;
+let dialogueTimer = null;
+let temporaryMessageActive = false;
 let talkingResident = null;
 let promptMode = "";
 let activeEnemy = null;
@@ -161,14 +163,39 @@ function revealRegionalBosses() {
   Object.entries(regionalBossStates).forEach(([region, state]) => {
     const enemies = ordinaryEnemies(areas[region]);
     if (state.defeated || state.revealed || !enemies.length || enemies.some((enemy) => !enemy.restored)) return;
-    const tiles = collectEnemySpawnTiles(areas[region]);
-    const spawn = tiles.find((tile) => tile.x > 5 && tile.y > 5) || tiles[0];
+    const tiles = guardianSpawnTiles(region, state.palaceEnemy);
+    if (!tiles.length) return;
+    const spawn = tiles[Math.floor(Math.random() * tiles.length)];
     const enemy = { ...state.palaceEnemy, id: `${region}-guardian-home`, x: spawn.x * config.tileSize + 3, y: spawn.y * config.tileSize,
       guardianPursuit: undefined, chasing: false, route: [], routeUntil: 0 };
     enemy.spawnX = enemy.x;
     enemy.spawnY = enemy.y;
     areas[region].enemies.push(enemy);
     state.revealed = true;
+  });
+}
+
+function guardianSpawnTiles(region, guardian) {
+  const area = areas[region];
+  const offset = enemyTileOffset(guardian);
+  const size = config.tileSize;
+  const clearAt = (x, y) => {
+    const left = Math.floor(x / size), right = Math.floor((x + guardian.width - 1) / size);
+    const top = Math.floor(y / size), bottom = Math.floor((y + guardian.height - 1) / size);
+    for (let row = top; row <= bottom; row += 1) {
+      for (let col = left; col <= right; col += 1) {
+        if (isBlockedTile(area.map[row]?.[col]) || area.map[row]?.[col] === "f" || tileIsEmbeddedVillage(area, col, row)) return false;
+      }
+    }
+    return true;
+  };
+  return collectEnemySpawnTiles(area).filter(({ x, y }) => {
+    if (region === "sylvan") {
+      const forest = landscape.thicket;
+      if (x >= forest.x - 1 && x < forest.x + forest.width + 1 && y >= forest.y - 1 && y < forest.y + forest.height + 1) return false;
+    }
+    const px = x * size + offset.x, py = y * size + offset.y;
+    return clearAt(px, py) && [[size, 0], [-size, 0], [0, size], [0, -size]].every(([dx, dy]) => clearAt(px + dx, py + dy));
   });
 }
 
@@ -407,6 +434,9 @@ function usePalaceStairs() {
 }
 
 function clearInteractionState() {
+  window.clearTimeout(dialogueTimer);
+  dialogueTimer = null;
+  temporaryMessageActive = false;
   talkingResident = null;
   dialogueUntil = 0;
   promptMode = "";
@@ -1137,16 +1167,35 @@ function standFromThrone() {
 }
 
 function showTemporaryPrompt(message, duration = 3000) {
+  window.clearTimeout(dialogueTimer);
+  temporaryMessageActive = true;
   dialogueUntil = performance.now() + duration;
   setPrompt(message);
-  window.setTimeout(updateInteractionPrompt, duration);
+  dialogueTimer = window.setTimeout(clearTemporaryMessage, duration);
+}
+
+function clearTemporaryMessage() {
+  window.clearTimeout(dialogueTimer);
+  dialogueTimer = null;
+  temporaryMessageActive = false;
+  dialogueUntil = 0;
+  talkingResident = null;
+  updateInteractionPrompt();
+}
+
+function dismissDialogue() {
+  if (promptMode === "boss-dialogue") {
+    advanceBossDialogue();
+    return true;
+  }
+  if (!temporaryMessageActive) return false;
+  clearTemporaryMessage();
+  return true;
 }
 
 function readSign() {
   if (!activeSign) return;
-  dialogueUntil = performance.now() + 5000;
-  setPrompt(activeSign[1]);
-  window.setTimeout(updateInteractionPrompt, 5000);
+  showTemporaryPrompt(activeSign[1], 5000);
 }
 
 function inspectHouse() {
@@ -1226,17 +1275,18 @@ function talkToNpc() {
   if (currentScreen === "game" && promptMode === "talk") {
     if (!activeEnemy?.restored) return;
     talkingResident = activeEnemy;
-    dialogueUntil = performance.now() + 4500;
     const positioned = activeEnemy.relocated ? positionedResident(activeEnemy) : activeEnemy;
-    pauseResidentConversation(activeEnemy, positioned, performance.now());
+    let message;
     if (activeEnemy?.visual === "flying") {
-      setPrompt(activeEnemy.talked
+      message = activeEnemy.talked
         ? "hey... you look kind of familiar. I don't know. probably just my head."
-        : "Huff... what happened?");
+        : "Huff... what happened?";
       activeEnemy.talked = true;
     } else {
-      setPrompt("What happened? Hello? Who are you? Well... either way, thanks for saving me.");
+      message = "What happened? Hello? Who are you? Well... either way, thanks for saving me.";
     }
-    window.setTimeout(updateInteractionPrompt, 4500);
+    // Luciano's exercise: add the Azure village dialogue override here.
+    showTemporaryPrompt(message, 4500);
+    pauseResidentConversation(activeEnemy, positioned, performance.now());
   }
 }
