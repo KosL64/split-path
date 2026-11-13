@@ -20,7 +20,7 @@ const soulLevelRanges = {
 
 const regionalBossDefinitions = {
   sylvan: { name: "Sylvan Guardian", level: 20, cubes: 3, souls: 0, palaceX: 8 },
-  azureApex: { name: "Azure Guardian", level: 50, cubes: 5, souls: 1, palaceX: 15 },
+  azureApex: { name: "Azure Guardian", level: 50, cubes: 5, souls: 1, palaceX: 15, encounterArea: "azureMountain" },
   controlledPlains: { name: "Plains Guardian", level: 100, cubes: 6, souls: 0, palaceX: 22 }
 };
 

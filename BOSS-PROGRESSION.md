@@ -4,8 +4,9 @@
 
 - The palace ground floor has three regional guardians. Kyle is upstairs with
   his existing 1000 health. Use Z on either staircase to travel between floors.
-- Palace guardians start battle on contact. A guardian also appears in
-  its home region when all ordinary enemies there have been restored.
+- Palace guardians start battle on contact. Restoring all ordinary enemies
+  reveals a second appearance in the region's encounter area. Azure's encounter
+  is near the center of Azure Mountain; Sylvan and Plains use their own regions.
 - Both appearances share one defeat state. Winning at either location removes
   both and releases the region's restored inhabitants exactly once.
 - Sylvan releases 3 cubes; Azure Apex releases 5 cubes and 1 soul;
@@ -19,6 +20,11 @@
 
 ## Guardian Pursuit And Stats
 
+Regional guardians roam in passable cardinal directions while idle, at 60% of
+the King's walking speed. They choose a new direction when blocked or after a
+short movement interval. Pursuit and retreat take priority over roaming. Kyle
+retains his separate stationary encounter.
+
 Guardians spot the King anywhere on an unobstructed row or column in their
 area. Once pursuing, they track him in any direction while visible, moving 20%
 faster than his sprint. Trees, including walk-through thicket trees, and other
@@ -28,9 +34,11 @@ Contact opens battle with `A guardian has appeared.` No interaction key is neede
 Leaving an area or reviving clears pursuit. Kyle retains his separate dialogue
 and encounter upstairs.
 
-Home-region guardians now select a random reachable clearing with full-body
-clearance and room in all four directions. Sylvan's guardian excludes the
-thicket and village grounds, and therefore appears in the open field portion.
+Sylvan and Plains guardians select random reachable clearings with full-body
+clearance and room in all four directions. Sylvan excludes the thicket and
+village grounds. Azure uses the nearest clear spawn to the mountain center,
+keeping the region's identity for palace synchronization, rewards and releases.
+Leaving and returning does not recreate or reposition an existing guardian.
 
 Enter or Space dismisses temporary exploration messages and NPC dialogue,
 releasing paused residents and restoring the nearby interaction prompt. During
@@ -40,8 +48,10 @@ sequence. Z continues to work for interactions and scripted dialogue.
 The Divine Path groups tier-three choices over their required tier-two node.
 Dodge is shared above both defense branches. Existing costs, branch locks and
 ability effects are retained. Narrow screens stack the three complete paths.
-Azure Village's new dialogue is intentionally left as the classroom exercise in
-`STUDENT-EXERCISE.md`.
+Azure Village's warning dialogue, completed in the classroom exercise, only
+plays while the Azure guardian is undefeated. Victory on the mountain or in
+the palace restores the normal cube/soul conversations. The five released
+cubes and one soul still roam Azure Apex rather than the mountain.
 
 Guardians have twice the ordinary attack, defense, and health for their level.
 

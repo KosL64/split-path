@@ -106,6 +106,11 @@ Region actors remain within their own chunk; they do not roam into a neighboring
 village or follow the player across regions. Regional guardian pursuit and
 combat rules are documented in `BOSS-PROGRESSION.md`.
 
+Restoring Azure Apex's ordinary enemies reveals the Azure guardian near the
+center of Azure Mountain, not in Azure Apex's outdoor fields. The mountain and
+palace appearances share a defeat state. Azure Village warnings stop after
+either appearance is defeated. Guardian-released residents remain in Azure Apex.
+
 New Game resets progression and starts inside Pristine Castle. Direct local-file
 play is retained; no dev server or build step is required.
 

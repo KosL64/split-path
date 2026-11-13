@@ -427,6 +427,8 @@ function finishRestoration() {
       : areaCleared
       ? regionalBossStates[currentAreaId]?.defeated
         ? `${area.name} is cleared. Its restored inhabitants are free.`
+        : regionalBossDefinitions[currentAreaId]?.encounterArea
+        ? `${area.name}: all ordinary enemies are restored. Its guardian awaits on ${areas[regionalBossDefinitions[currentAreaId].encounterArea].name}.`
         : `${area.name}: all ordinary enemies are restored. Its guardian has appeared.`
       : `${area.name}: ${remainingEnemies} controlled creatures remain.`;
   }, 900);

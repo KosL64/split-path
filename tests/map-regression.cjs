@@ -654,9 +654,10 @@ async function verifyGuardianProgression(page) {
       const ordinary = ordinaryEnemies(area);
       ordinary.slice(0, -1).forEach(candidate => { candidate.restored = true; });
       restoreMapEnemy(ordinary.at(-1), region);
-      const boss = area.enemies.find(candidate => candidate.regionBoss === region);
+      const encounterArea = regionalBossDefinitions[region].encounterArea || region;
+      const boss = areas[encounterArea].enemies.find(candidate => candidate.regionBoss === region);
       check(boss && !boss.restored, `${region}: clearing ordinary enemies reveals its guardian`);
-      enterArea(region);
+      enterArea(encounterArea);
       check(!collidesWithBlockedTile(boss), `${region}: guardian spawns on clear ground`);
       player.x = boss.x;
       player.y = boss.y;
@@ -679,7 +680,7 @@ async function verifyGuardianProgression(page) {
         && restored.filter(candidate => candidate.visual === 'flying').length === definition.souls, `${region}: exact released cube and soul counts`);
       check(playerState.divinePoints === points + 5, `${region}: guardian reward occurs once`);
       check(!visibleAreaEnemies('controlledPalace').some(candidate => candidate.regionBoss === region)
-        && !visibleAreaEnemies(region).some(candidate => candidate.regionBoss === region), `${region}: defeat removes both appearances`);
+        && !visibleAreaEnemies(encounterArea).some(candidate => candidate.regionBoss === region), `${region}: defeat removes both appearances`);
       const count = restored.length;
       defeatRegionalBoss(region);
       revealRegionalBosses();
@@ -1032,6 +1033,110 @@ async function verifyLatestRequests(page, label) {
   console.log(`${label}: field spawns, all ${interiors.length} interior quick exits, dismissible messages and branched Divine Path pass.`);
 }
 
+async function verifyAzureMountainUpdate(page, label) {
+  const results = await page.evaluate(() => {
+    const passed = [];
+    const check = (value, message) => { if (!value) throw new Error(message); passed.push(message); };
+    resetGame();
+    showScreen('game');
+    enterArea('controlledPalace');
+    contactLockedUntil = 0;
+    player.x = 2 * config.tileSize;
+    player.y = 15 * config.tileSize;
+    const now = performance.now();
+    for (const [region, state] of Object.entries(regionalBossStates)) {
+      const boss = state.palaceEnemy;
+      const initial = { x: boss.x, y: boss.y };
+      for (let frame = 0; frame < 30; frame += 1) {
+        moveGuardian(boss, now + frame * 16);
+        check(!collidesWithBlockedTile(boss), `${region}: idle roaming respects collision`);
+      }
+      check(boss.x !== initial.x || boss.y !== initial.y, `${region}: guardian roams without spotting the King`);
+      check(!boss.chasing, `${region}: idle roaming is distinct from pursuit`);
+    }
+    resetGame();
+    showScreen('game');
+    enterArea('azureMountain');
+    check(!areas.azureMountain.enemies.some(enemy => enemy.regionBoss), 'Mountain guardian waits for ordinary Azure restoration');
+    const ordinary = ordinaryEnemies(areas.azureApex);
+    ordinary.slice(0, -1).forEach(enemy => { enemy.restored = true; });
+    restoreMapEnemy(ordinary.at(-1), 'azureApex');
+    const boss = areas.azureMountain.enemies.find(enemy => enemy.regionBoss === 'azureApex');
+    check(boss && !boss.restored, 'Clearing Azure reveals its guardian on Azure Mountain');
+    check(!areas.azureApex.enemies.some(enemy => enemy.regionBoss), 'Azure guardian no longer spawns outside the village');
+    check(Math.hypot(boss.x + boss.width / 2 - areas.azureMountain.width * config.tileSize / 2,
+      boss.y + boss.height / 2 - areas.azureMountain.height * config.tileSize / 2) <= config.tileSize,
+      'Mountain guardian appears within one tile of the center');
+    check(!collidesWithBlockedTile(boss), 'Mountain guardian has full-body clearance');
+    const position = { x: boss.x, y: boss.y };
+    finishAreaDeparture();
+    enterArea('azureVillage');
+    enterArea('azureMountain');
+    revealRegionalBosses();
+    check(areas.azureMountain.enemies.filter(enemy => enemy.regionBoss === 'azureApex').length === 1
+      && boss.x === position.x && boss.y === position.y, 'Re-entry neither duplicates nor repositions the mountain guardian');
+    const cube = ordinary.find(enemy => enemy.visual === 'ground');
+    const soul = ordinary.find(enemy => enemy.visual === 'flying');
+    const talk = (resident) => {
+      enterArea('azureVillage');
+      activeEnemy = resident;
+      promptMode = 'talk';
+      talkToNpc();
+      const text = document.querySelector('#interaction-prompt').textContent;
+      clearTemporaryMessage();
+      return text;
+    };
+    check(talk(cube).includes('roaring sound'), 'Azure cubes warn about the mountain before guardian defeat');
+    check(talk(soul).includes('HUGE purple blob'), 'Azure souls warn about the guardian before defeat');
+    enterArea('azureMountain');
+    playerState.hasStaff = true;
+    player.x = boss.x;
+    player.y = boss.y;
+    contactLockedUntil = 0;
+    checkAreaEncounters();
+    check(currentScreen === 'battle' && activeEnemy === boss, 'Mountain guardian starts battle on contact');
+    finishRestoration();
+    finishRestoration();
+    check(playerState.divinePoints === 5 && regionalBossStates.azureApex.defeated, 'Mountain victory rewards once and sets shared defeat state');
+    check(!visibleAreaEnemies('azureMountain').some(enemy => enemy.regionBoss === 'azureApex')
+      && !visibleAreaEnemies('controlledPalace').some(enemy => enemy.regionBoss === 'azureApex'), 'Victory removes mountain and palace appearances');
+    check(areas.azureApex.enemies.filter(enemy => enemy.permanentResident && enemy.visual === 'ground').length === 5
+      && areas.azureApex.enemies.filter(enemy => enemy.permanentResident && enemy.visual === 'flying').length === 1,
+      'Mountain victory still releases five cubes and one soul in Azure Apex');
+    window.clearTimeout(restorationTimer);
+    restorationTimer = null;
+    setBattleButtons(false);
+    showScreen('game');
+    check(talk(cube).startsWith('What happened?'), 'Azure cubes return to normal dialogue after defeat');
+    check(!talk(soul).includes('purple blob'), 'Azure souls return to normal dialogue after defeat');
+    enterArea('azureMountain');
+    revealRegionalBosses();
+    check(!visibleAreaEnemies().some(enemy => enemy.regionBoss), 'Defeated guardian stays gone on mountain re-entry');
+    resetGame();
+    showScreen('game');
+    enterArea('controlledPalace');
+    playerState.hasStaff = true;
+    startBattle(regionalBossStates.azureApex.palaceEnemy);
+    finishRestoration();
+    window.clearTimeout(restorationTimer);
+    restorationTimer = null;
+    setBattleButtons(false);
+    showScreen('game');
+    const newCube = ordinaryEnemies(areas.azureApex).find(enemy => enemy.visual === 'ground');
+    newCube.restored = true;
+    check(talk(newCube).startsWith('What happened?'), 'Palace victory also clears Azure village warnings');
+    ordinaryEnemies(areas.azureApex).forEach(enemy => { enemy.restored = true; });
+    revealRegionalBosses();
+    check(!areas.azureMountain.enemies.some(enemy => enemy.regionBoss), 'Palace-first victory prevents mountain boss duplication');
+    resetGame();
+    check(!regionalBossStates.azureApex.defeated && !regionalBossStates.azureApex.revealed
+      && !areas.azureMountain.enemies.some(enemy => enemy.regionBoss), 'Reset clears mountain guardian progression');
+    showScreen('game');
+    return passed.filter((message, index) => !message.includes('respects collision') || index % 30 === 0);
+  });
+  console.log(`${label}: ${results.join('\n')}`);
+}
+
 (async () => {
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
@@ -1053,6 +1158,14 @@ async function verifyLatestRequests(page, label) {
     browser = await playwright.chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || 'msedge' });
     const origin = `http://127.0.0.1:${server.address().port}`;
     const desktop = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    if (process.argv.includes('--azure-update-only')) {
+      await desktop.goto(origin + '/index.html');
+      await verifyAzureMountainUpdate(desktop, 'desktop');
+      const mobile = await browser.newPage({ viewport: { width: 390, height: 844 } });
+      await mobile.goto(pathToFileURL(path.join(root, 'index.html')).href);
+      await verifyAzureMountainUpdate(mobile, 'mobile-local');
+      return;
+    }
     if (process.argv.includes('--latest-only')) {
       await desktop.goto(origin + '/index.html');
       await verifyLatestRequests(desktop, 'desktop');
@@ -1115,6 +1228,7 @@ async function verifyLatestRequests(page, label) {
     await verifyScalingAndDagger(desktop);
     await verifyOverworld(desktop, 'desktop');
     await verifyLatestRequests(desktop, 'desktop');
+    await verifyAzureMountainUpdate(desktop, 'desktop');
     await desktop.goto(origin + '/index.html');
     await verifyTitleAndStory(desktop, 'desktop');
     if (baseline) {
@@ -1137,6 +1251,7 @@ async function verifyLatestRequests(page, label) {
     await verifyBossVisuals(local, 'mobile-local');
     await verifyOverworld(local, 'mobile-local');
     await verifyLatestRequests(local, 'mobile-local');
+    await verifyAzureMountainUpdate(local, 'mobile-local');
   } finally {
     if (browser) await browser.close();
     await new Promise(resolve => server.close(resolve));

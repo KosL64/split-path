@@ -165,18 +165,23 @@ function revealRegionalBosses() {
     if (state.defeated || state.revealed || !enemies.length || enemies.some((enemy) => !enemy.restored)) return;
     const tiles = guardianSpawnTiles(region, state.palaceEnemy);
     if (!tiles.length) return;
-    const spawn = tiles[Math.floor(Math.random() * tiles.length)];
+    const encounterArea = regionalBossDefinitions[region].encounterArea || region;
+    const area = areas[encounterArea];
+    const spawn = encounterArea === "azureMountain"
+      ? tiles.reduce((nearest, tile) => Math.hypot(tile.x + 0.5 - area.width / 2, tile.y + 0.5 - area.height / 2)
+        < Math.hypot(nearest.x + 0.5 - area.width / 2, nearest.y + 0.5 - area.height / 2) ? tile : nearest)
+      : tiles[Math.floor(Math.random() * tiles.length)];
     const enemy = { ...state.palaceEnemy, id: `${region}-guardian-home`, x: spawn.x * config.tileSize + 3, y: spawn.y * config.tileSize,
       guardianPursuit: undefined, chasing: false, route: [], routeUntil: 0 };
     enemy.spawnX = enemy.x;
     enemy.spawnY = enemy.y;
-    areas[region].enemies.push(enemy);
+    area.enemies.push(enemy);
     state.revealed = true;
   });
 }
 
 function guardianSpawnTiles(region, guardian) {
-  const area = areas[region];
+  const area = areas[regionalBossDefinitions[region].encounterArea || region];
   const offset = enemyTileOffset(guardian);
   const size = config.tileSize;
   const clearAt = (x, y) => {
@@ -595,7 +600,10 @@ function moveGuardian(enemy, now) {
     pursuit.lastSeen = now;
     enemy.chasing = true;
   }
-  if (!pursuit.target) return;
+  if (!pursuit.target) {
+    roamGuardian(enemy, now);
+    return;
+  }
   if (now - pursuit.lastSeen >= 5000) {
     pursuit.target = null;
     pursuit.retreatUntil = now + 1200;
@@ -606,6 +614,20 @@ function moveGuardian(enemy, now) {
     return;
   }
   chaseTarget(enemy, pursuit.target, now);
+}
+
+function roamGuardian(enemy, now) {
+  const speed = config.areaMoveSpeed * 0.6;
+  if (now >= (enemy.movingUntil || 0)) {
+    const directions = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([x, y]) =>
+      !collidesWithBlockedTile({ ...enemy, x: enemy.x + x * config.tileSize, y: enemy.y + y * config.tileSize }));
+    if (!directions.length) return;
+    const [x, y] = directions[Math.floor(Math.random() * directions.length)];
+    enemy.moveX = x;
+    enemy.moveY = y;
+    enemy.movingUntil = now + 700 + Math.random() * 700;
+  }
+  moveEnemyInCurrentDirection(enemy, now, speed);
 }
 
 function retreatGuardian(enemy) {
@@ -1285,8 +1307,7 @@ function talkToNpc() {
     } else {
       message = "What happened? Hello? Who are you? Well... either way, thanks for saving me.";
     }
-    // Luciano's exercise: add the Azure village dialogue override here.
-    if (currentAreaId === "azureVillage") {
+    if (currentAreaId === "azureVillage" && !regionalBossStates.azureApex.defeated) {
       message = activeEnemy.visual === "flying"
         ? "Hey... there is a HUGE purple blob thing on Azure Mountain... Are you able to check it out?"
         : "ugh, I keep hearing a roaring sound and a loud banging coming from the mountain.";
