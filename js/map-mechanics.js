@@ -1287,10 +1287,11 @@ function talkToNpc() {
     }
     // Luciano's exercise: add the Azure village dialogue override here.
     if (currentAreaId === "azureVillage") {
-  message = activeEnemy.visual === "flying"
-    ? "Hey... there is a HUGE purple blob thing on Azure Mountain... Are you able to check it out?"
-    : "ugh, I keep hearing a roaring sound and a loud banging coming from the mountain.";
-}
+      message = activeEnemy.visual === "flying"
+        ? "Hey... there is a HUGE purple blob thing on Azure Mountain... Are you able to check it out?"
+        : "ugh, I keep hearing a roaring sound and a loud banging coming from the mountain.";
+    }
+    
     showTemporaryPrompt(message, 4500);
     pauseResidentConversation(activeEnemy, positioned, performance.now());
   }
