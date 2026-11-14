@@ -417,6 +417,13 @@ function finishRestoration() {
     if (currentScreen !== "battle" || activeEnemy !== restoredEnemy) return;
     contactLockedUntil = performance.now() + config.contactCooldown;
     setBattleButtons(false);
+    if (restoredEnemy.id === "kyle-boss") {
+      document.querySelector("#credits-message").textContent = restoredEnemyAreas.size === 2
+        ? "I think you missed a spot!"
+        : "Thank you for playing Split Path.";
+      showScreen("credits");
+      return;
+    }
     showScreen("upgrades");
     updateUpgradeButtons();
     document.querySelector("#upgrade-message").textContent = restoredEnemy.regionBoss
@@ -565,6 +572,7 @@ document.querySelector("#upgrade-button").addEventListener("click", () => {
 });
 document.querySelector("#close-upgrades").addEventListener("click", () => showScreen("game"));
 document.querySelector("#reset-button").addEventListener("click", resetGame);
+document.querySelector("#credits-return").addEventListener("click", () => showScreen("title"));
 document.querySelector("#attack-action").addEventListener("click", attackAction);
 document.querySelector("#light-spell-action").addEventListener("click", lightSpellAction);
 document.querySelector("#soul-spell-action").addEventListener("click", soulSpellAction);

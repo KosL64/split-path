@@ -7,6 +7,10 @@ let dialogueUntil = 0;
 let talkingResident = null;
 let firstControlledPlainsCubeId = null;
 let specialVillageResident = null;
+let sylvanFriendAskedBy = null;
+let sylvanFriendThanksSaid = false;
+let restoredEnemyAreas = new Set();
+const earlyKyleSpawnOnLoad = Math.random() < 0.009;
 let promptMode = "";
 let activeEnemy = null;
 let activeNode = null;
@@ -40,6 +44,7 @@ const castleState = {
 // Combat reports restoration here; map progression owns the resulting world changes.
 function restoreMapEnemy(enemy, areaId) {
   enemy.restored = true;
+  if (enemy.kind !== "boss") restoredEnemyAreas.add(areaId);
   if (areaId === "controlledPlains" && enemy.visual !== "flying" && enemy.kind !== "boss" && !firstControlledPlainsCubeId) {
     firstControlledPlainsCubeId = enemy.id;
   }
@@ -59,6 +64,9 @@ function restoreMapEnemy(enemy, areaId) {
 function resetMapState() {
   firstControlledPlainsCubeId = null;
   specialVillageResident = null;
+  sylvanFriendAskedBy = null;
+  sylvanFriendThanksSaid = false;
+  restoredEnemyAreas = new Set();
   environmentState.springSince = null;
   environmentState.cloudSince = null;
   Object.assign(castleState, {
@@ -105,6 +113,7 @@ function resetMapState() {
     });
   });
   initializeRegionalBosses();
+  ensureEarlyKyle();
   regionDirectory.nodes.forEach((node) => {
     node.unlocked = node.kind !== "village";
   });
@@ -149,6 +158,18 @@ function initializeBoss() {
     waitUntil: 0
   }];
   initializeRegionalBosses();
+  ensureEarlyKyle();
+}
+
+function ensureEarlyKyle() {
+  if (!earlyKyleSpawnOnLoad || areas.pristineCastle.enemies.some((enemy) => enemy.id === "early-kyle")) return;
+  const x = config.tileSize + 7;
+  const y = 8 * config.tileSize + 5;
+  areas.pristineCastle.enemies.push({
+    id: "early-kyle", name: "Kyle", kind: "easter-egg", visual: "boss", originArea: "pristineCastle",
+    x, y, spawnX: x, spawnY: y, width: 42, height: 48, restored: true, relocated: false,
+    stationary: true, facing: 1, talked: false, earlyKyle: true
+  });
 }
 
 function initializeRegionalBosses() {
@@ -500,6 +521,19 @@ function moveVillageResidents() {
   villageResidents().forEach((resident) => {
     initializeVillageResident(resident);
     if (pauseResidentConversation(resident, positionedResident(resident), now)) return;
+    if (resident.id === "sylvan-cube-9") {
+      const friend = villageResidents().find((candidate) => candidate.id === "sylvan-cube-6");
+      if (friend) {
+        const dx = friend.villageX - resident.villageX;
+        const dy = friend.villageY - resident.villageY;
+        const distance = Math.hypot(dx, dy);
+        if (distance > 64) {
+          const next = { ...resident, x: resident.villageX + dx / distance * 0.55, y: resident.villageY + dy / distance * 0.55 };
+          if (!collidesWithBlockedTile(next)) { resident.villageX = next.x; resident.villageY = next.y; }
+          return;
+        }
+      }
+    }
     if (now < resident.villageWaitUntil) return;
     if (now >= resident.villageMovingUntil) {
       const directions = [[1, 0], [-1, 0], [0, 1], [0, -1], [0, 0]];
@@ -529,6 +563,10 @@ function moveVillageResidents() {
 function moveEnemy(enemy) {
   const now = performance.now();
   if (pauseResidentConversation(enemy, enemy, now)) return;
+  if (enemy.id === "sylvan-cube-9") {
+    const friend = areas[currentAreaId].enemies.find((candidate) => candidate.id === "sylvan-cube-6" && candidate.restored && !candidate.relocated);
+    if (friend && followFriend(enemy, friend, enemyMoveSpeed(enemy), 58)) return;
+  }
   const restoredTarget = enemy.restored ? null : nearestRestoredCube(enemy, config.tileSize * 4);
 
   if (enemy.restored && enemy.visual === "ground") {
@@ -580,6 +618,18 @@ function moveEnemy(enemy) {
   enemy.x = next.x;
   enemy.y = next.y;
   if (enemy.moveX) enemy.facing = Math.sign(enemy.moveX);
+}
+
+function followFriend(follower, leader, speed, minimumDistance) {
+  const dx = leader.x - follower.x;
+  const dy = leader.y - follower.y;
+  const distance = Math.hypot(dx, dy);
+  if (distance <= minimumDistance) return true;
+  const next = { ...follower, x: follower.x + dx / distance * speed, y: follower.y + dy / distance * speed };
+  if (collidesWithBlockedTile(next)) return false;
+  follower.x = next.x;
+  follower.y = next.y;
+  return true;
 }
 
 function nearestRestoredCube(enemy, range) {
@@ -910,6 +960,24 @@ function chooseSpecialVillageResident() {
   specialVillageResident = candidates[Math.floor(Math.random() * candidates.length)] || null;
 }
 
+function sylvanFriendDialogue(enemy) {
+  const friendIds = ["sylvan-cube-6", "sylvan-cube-9"];
+  if (!friendIds.includes(enemy.id)) return null;
+  const friends = friendIds.map((id) => areas.sylvan.enemies.find((candidate) => candidate.id === id));
+  const other = friends.find((candidate) => candidate !== enemy);
+  if (sylvanFriendThanksSaid) return "Hi there!";
+  if (other?.restored) {
+    if (!sylvanFriendAskedBy) return null;
+    if (enemy.id === sylvanFriendAskedBy) {
+      sylvanFriendThanksSaid = true;
+      return "thank you for saving my friend!";
+    }
+    return null;
+  }
+  sylvanFriendAskedBy = sylvanFriendAskedBy || enemy.id;
+  return enemy.id === sylvanFriendAskedBy ? "Can you please save my friend? i don't know where he is!" : null;
+}
+
 function markSpecialVillageDeparture(areaId) {
   if (specialVillageResident?.homeAreaId === areaId && specialVillageResident.villageBadDaySaid) {
     specialVillageResident.villageLeftAfterBadDay = true;
@@ -1042,11 +1110,22 @@ function interactWithCastle(feature) {
 
   if (feature === "rocks") {
     if (!playerState.hasStaff) {
-      showTemporaryPrompt("The rocks will not move. You need your staff.");
+      showTemporaryPrompt("You try to break the rocks, but... it turns out your weak.");
       return;
     }
+    const waitedOnThrone = castleState.sittingStartedAt > 0 && performance.now() - castleState.sittingStartedAt >= 5000;
+    const swungWhileMoving = keys.has("arrowleft") || keys.has("a") || keys.has("arrowright") || keys.has("d") || keys.has("arrowdown") || keys.has("s");
     castleState.exitCleared = true;
-    showTemporaryPrompt("The staff flashes. The fallen rocks break apart!");
+    if (waitedOnThrone) {
+      playerState.maxHealth += 1;
+      playerState.health = Math.min(playerState.maxHealth, playerState.health + 1);
+      updateHud();
+      showTemporaryPrompt("patience is always the answer.");
+    } else if (swungWhileMoving) {
+      showTemporaryPrompt("You hit the rocks with your staff with all your might. they shatter, but now your staff is dented.");
+    } else {
+      showTemporaryPrompt("You hit the rocks with your staff. they shatter into pieces.");
+    }
     return;
   }
 
@@ -1166,11 +1245,24 @@ function updatePlainsRestoration() {
 
 function talkToNpc() {
   if (currentScreen === "game" && promptMode === "talk") {
+    if (activeEnemy?.earlyKyle) {
+      const returnBoss = areas.palaceUpper.enemies.find((enemy) => enemy.id === "kyle-boss");
+      if (returnBoss) { returnBoss.x = returnBoss.spawnX; returnBoss.y = returnBoss.spawnY; }
+      activeEnemy.relocated = true;
+      showTemporaryPrompt("Uh... i wasn't expecting you to be so early. BYE!", 3000);
+      return;
+    }
     if (!activeEnemy?.restored) return;
     talkingResident = activeEnemy;
     dialogueUntil = performance.now() + 4500;
     const positioned = activeEnemy.relocated ? positionedResident(activeEnemy) : activeEnemy;
     pauseResidentConversation(activeEnemy, positioned, performance.now());
+    const friendLine = sylvanFriendDialogue(activeEnemy);
+    if (friendLine) {
+      setPrompt(friendLine);
+      window.setTimeout(updateInteractionPrompt, 4500);
+      return;
+    }
     if (activeEnemy.id === firstControlledPlainsCubeId) {
       if (!activeEnemy.plainsFirstCubeDialogueSaid) {
         activeEnemy.plainsFirstCubeDialogueSaid = true;
