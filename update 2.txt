@@ -1,6 +1,7 @@
-well... at least they say the right things!
+Ok. the bosses spawn where they are supposed to, but a minor detail. Im gonna add some other stuff on the side. mostly a battle update. Actually... NO! this update is gonna be about the attacks and adding some more quicktimes.  
 
-1. When the boss is dead, make the NPCs say what they normally say. The NPCs in azure village. when you kill the boss, they still say there is a big blob on the mountain. 
+1. when an areas respectieve guardian appears, it should disappear from the castle as well. 
 
-2. so... the boss doesn't spawn on the mountain. he still spawns like... outside the village. once you enter Azure Mountain, the boss should be in the middle. also... future note... the bosses will always roam around. 
+1. once you upgrade the first health upgrade... so... you know how the quicktime bar appears for attack? so... make one for health also appear. it will work a bit different though. so... what it does, is it FOR NOW, a circle quicktime (kind of like the circle skillcheck in dandys world). will add more on that later. 
 
+2. when you upgrade lifesteal, add a SECOND quicktime after the first attack one. it will still be a circle, (kind of like the circle skillcheck in dandys world) but this time... it will be 3 circles that will randomly appear somewhere on the screen and they will pop up right after the previous one. they will be small though. they will also be a bit more purple then the attack quicktime, kinda like a bite (that is how im describing it (DO NOT DO ANYTHING THAT YOU WERE ABOUT TO DO WHEN I SAID KINDA LIKE A BITE. I JUST SAID THAT FOR NO REASON AT ALL!))
