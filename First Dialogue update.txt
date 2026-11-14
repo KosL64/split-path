@@ -1,0 +1,7 @@
+First Dialogue update!
+
+1. so... one RANDOM cube or soul, once their respective village is saved... if you interact with that EXACT npc, have them say... "Wow... you just HAD to talk to me. Im already having a bad day!" then if you leave the village, enter back, and talk to them again, have them say, "Hey... sorry about earlier. I got chased by one of those purple things for a long time." this cube or soul will be different for everyone. well... not everyone, but just one random cube or soul out of all 106 cubes that have been restored. Not boss cubes, because you need to restore all the controlled cubes and souls in the area before they show up. so... it wouldn't make sense. ONLY THE VILLAGE CUBES OR SOULS. 
+
+2. Dont make the thrown if you sit on it... dont make it say, "the thrown remembers its king." its annoying. Sorry! 
+
+3. make the first cube specifically (not the first soul) in controlled plains when they are restored to say, "thanks for saving me! so... where do i go now? there isn't a village near by." not any specific cube that is restored, but the FIRST CUBE RESTORED. (so that could be controlled plains cube 3, 23, 19, 48, 55, etc. just... the first cube that is restored, once you talk to them, they say that. also... not the first cube you talk to, just the first cube you restore.) (ALSO... if you talk to the, again. just have them say the default cube dialogue. 
