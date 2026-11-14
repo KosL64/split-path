@@ -5,6 +5,8 @@ let currentAreaId = "sylvan";
 let contactLockedUntil = 0;
 let dialogueUntil = 0;
 let talkingResident = null;
+let firstControlledPlainsCubeId = null;
+let specialVillageResident = null;
 let promptMode = "";
 let activeEnemy = null;
 let activeNode = null;
@@ -38,6 +40,9 @@ const castleState = {
 // Combat reports restoration here; map progression owns the resulting world changes.
 function restoreMapEnemy(enemy, areaId) {
   enemy.restored = true;
+  if (areaId === "controlledPlains" && enemy.visual !== "flying" && enemy.kind !== "boss" && !firstControlledPlainsCubeId) {
+    firstControlledPlainsCubeId = enemy.id;
+  }
   if (enemy.regionBoss) defeatRegionalBoss(enemy.regionBoss);
   if (enemy.kind !== "boss" && !enemy.permanentResident) initializeVillageResident(enemy);
   const area = areas[areaId];
@@ -52,6 +57,8 @@ function restoreMapEnemy(enemy, areaId) {
 }
 
 function resetMapState() {
+  firstControlledPlainsCubeId = null;
+  specialVillageResident = null;
   environmentState.springSince = null;
   environmentState.cloudSince = null;
   Object.assign(castleState, {
@@ -76,6 +83,12 @@ function resetMapState() {
       enemy.route = [];
       enemy.routeUntil = 0;
       enemy.talked = false;
+      delete enemy.plainsFirstCubeDialogueSaid;
+      delete enemy.plainsFollowupDialogueSaid;
+      delete enemy.villageBadDaySaid;
+      delete enemy.villageLeftAfterBadDay;
+      delete enemy.villageApologyReady;
+      delete enemy.villageApologySaid;
       enemy.facing = 1;
       delete enemy.gazeX;
       delete enemy.gazeY;
@@ -97,6 +110,7 @@ function resetMapState() {
   });
   updatePlainsRestoration();
   currentAreaId = "sylvan";
+  chooseSpecialVillageResident();
   updateVillageLocks();
 }
 
@@ -377,6 +391,7 @@ function enterArea(areaId) {
   clearInteractionState();
   gameMode = "area";
   currentAreaId = areaId;
+  markSpecialVillageEntry(areaId);
   player.x = area.start.x * config.tileSize + (config.tileSize - player.width) / 2;
   player.y = area.start.y * config.tileSize + 2;
   contactLockedUntil = performance.now() + config.contactCooldown;
@@ -889,6 +904,23 @@ function villageResidents(areaId = currentAreaId) {
   return areas[sourceId].enemies.filter((enemy) => enemy.restored && enemy.relocated && enemy.kind !== "boss" && !enemy.permanentResident);
 }
 
+function chooseSpecialVillageResident() {
+  const candidates = ["sylvan", "azureApex"].flatMap((areaId) => areas[areaId].enemies)
+    .filter((enemy) => enemy.kind !== "boss" && !enemy.permanentResident);
+  specialVillageResident = candidates[Math.floor(Math.random() * candidates.length)] || null;
+}
+
+function markSpecialVillageDeparture(areaId) {
+  if (specialVillageResident?.homeAreaId === areaId && specialVillageResident.villageBadDaySaid) {
+    specialVillageResident.villageLeftAfterBadDay = true;
+  }
+}
+
+function markSpecialVillageEntry(areaId) {
+  if (specialVillageResident?.homeAreaId === areaId && specialVillageResident.villageLeftAfterBadDay) {
+    specialVillageResident.villageApologyReady = true;
+  }
+}
 function residentPosition(index, villageAreaId = currentAreaId) {
   const home = areas[villageAreaId]?.homeSlots?.[index];
   if (home) {
@@ -1036,7 +1068,6 @@ function sitOnThrone() {
   player.y = throne.y * config.tileSize + 112 - player.height - 6;
   player.facing = 1;
   player.view = "front";
-  showTemporaryPrompt("The throne remembers its King.", 1800);
 }
 
 function standFromThrone() {
@@ -1140,6 +1171,35 @@ function talkToNpc() {
     dialogueUntil = performance.now() + 4500;
     const positioned = activeEnemy.relocated ? positionedResident(activeEnemy) : activeEnemy;
     pauseResidentConversation(activeEnemy, positioned, performance.now());
+    if (activeEnemy.id === firstControlledPlainsCubeId) {
+      if (!activeEnemy.plainsFirstCubeDialogueSaid) {
+        activeEnemy.plainsFirstCubeDialogueSaid = true;
+        setPrompt("Thanks for saving me! So... where do I go now? There isn't a village nearby.");
+      } else if (!activeEnemy.plainsFollowupDialogueSaid) {
+        activeEnemy.plainsFollowupDialogueSaid = true;
+        setPrompt("You never answered my question.");
+      } else {
+        setPrompt("...");
+      }
+      window.setTimeout(updateInteractionPrompt, 4500);
+      return;
+    }
+    const isSpecialVillageNpc = activeEnemy === specialVillageResident
+      && activeEnemy.relocated
+      && villageAreaForSource(activeEnemy.originArea) === currentAreaId
+      && areas[activeEnemy.originArea].healed;
+    if (isSpecialVillageNpc && !activeEnemy.villageBadDaySaid) {
+      activeEnemy.villageBadDaySaid = true;
+      setPrompt("Wow... you just HAD to talk to me. I'm already having a bad day!");
+      window.setTimeout(updateInteractionPrompt, 4500);
+      return;
+    }
+    if (isSpecialVillageNpc && activeEnemy.villageApologyReady && !activeEnemy.villageApologySaid) {
+      activeEnemy.villageApologySaid = true;
+      setPrompt("Hey... sorry about earlier. I got chased by one of those purple things for a long time.");
+      window.setTimeout(updateInteractionPrompt, 4500);
+      return;
+    }
     if (activeEnemy?.visual === "flying") {
       setPrompt(activeEnemy.talked
         ? "hey... you look kind of familiar. I don't know. probably just my head."
