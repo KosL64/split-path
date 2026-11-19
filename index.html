@@ -77,6 +77,13 @@
           <div class="attack-timing-track" aria-hidden="true"><span></span></div>
         </div>
 
+        <div id="battle-skillcheck" class="hidden" aria-live="polite">
+          <button id="skillcheck-hit" type="button" aria-keyshortcuts="Z" aria-label="Time the circle with Z">
+            <span class="skillcheck-ring" aria-hidden="true"></span>
+            <span id="skillcheck-label"></span>
+            <kbd>Z</kbd>
+          </button>
+        </div>
         <div class="battle-actions">
           <button id="attack-action" class="primary-button">Attack</button>
           <button id="light-spell-action" class="hidden">Light Spell</button>
@@ -100,6 +107,16 @@
       </div>
     </section>
 
+    <section id="credits-screen" class="screen">
+      <div class="battle-panel">
+        <div class="upgrade-header">
+          <p class="eyebrow">The Split Path</p>
+          <h2>Journey Complete</h2>
+        </div>
+        <p id="credits-message">Thank you for playing.</p>
+        <button id="credits-return" class="primary-button">Return to title</button>
+      </div>
+    </section>
     <section id="upgrade-screen" class="screen">
       <div class="upgrade-panel">
         <div class="upgrade-header">
@@ -201,6 +218,7 @@
   <script src="js/map-rendering.js"></script>
   <script src="js/map-landmarks.js"></script>
   <script src="js/map-overworld.js"></script>
+  <script src="js/battle-skillchecks.js"></script>
   <script src="js/game.js"></script>
 </body>
 </html>

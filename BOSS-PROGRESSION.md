@@ -5,9 +5,9 @@
 - The palace ground floor has three regional guardians. Kyle is upstairs with
   his existing 1000 health. Use Z on either staircase to travel between floors.
 - Palace guardians start battle on contact. Restoring all ordinary enemies
-  reveals a second appearance in the region's encounter area. Azure's encounter
+  moves the guardian from the palace to the region's encounter area. Azure's encounter
   is near the center of Azure Mountain; Sylvan and Plains use their own regions.
-- Both appearances share one defeat state. Winning at either location removes
+- Both locations share one defeat state. Winning at either location removes
   both and releases the region's restored inhabitants exactly once.
 - Sylvan releases 3 cubes; Azure Apex releases 5 cubes and 1 soul;
   Controlled Plains releases 6 cubes. These residents wander their home region

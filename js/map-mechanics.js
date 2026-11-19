@@ -7,6 +7,12 @@ let dialogueUntil = 0;
 let dialogueTimer = null;
 let temporaryMessageActive = false;
 let talkingResident = null;
+let firstControlledPlainsCubeId = null;
+let specialVillageResident = null;
+let sylvanFriendAskedBy = null;
+let sylvanFriendThanksSaid = false;
+let restoredEnemyAreas = new Set();
+const earlyKyleSpawnOnLoad = Math.random() < 0.009;
 let promptMode = "";
 let activeEnemy = null;
 let activeNode = null;
@@ -26,7 +32,11 @@ function bossDefeated(enemy) {
 }
 
 function visibleAreaEnemies(areaId = currentAreaId) {
-  return areas[areaId].enemies.filter((enemy) => enemy.kind === "boss" ? !bossDefeated(enemy) : !enemy.relocated);
+  return areas[areaId].enemies.filter((enemy) => {
+    if (enemy.kind !== "boss") return !enemy.relocated;
+    if (bossDefeated(enemy)) return false;
+    return !(areaId === "controlledPalace" && enemy.regionBoss && regionalBossStates[enemy.regionBoss].revealed);
+  });
 }
 
 const castleState = {
@@ -40,6 +50,10 @@ const castleState = {
 // Combat reports restoration here; map progression owns the resulting world changes.
 function restoreMapEnemy(enemy, areaId) {
   enemy.restored = true;
+  if (enemy.kind !== "boss") restoredEnemyAreas.add(areaId);
+  if (areaId === "controlledPlains" && enemy.visual !== "flying" && enemy.kind !== "boss" && !firstControlledPlainsCubeId) {
+    firstControlledPlainsCubeId = enemy.id;
+  }
   if (enemy.regionBoss) defeatRegionalBoss(enemy.regionBoss);
   if (enemy.kind !== "boss" && !enemy.permanentResident) initializeVillageResident(enemy);
   const area = areas[areaId];
@@ -54,6 +68,11 @@ function restoreMapEnemy(enemy, areaId) {
 }
 
 function resetMapState() {
+  firstControlledPlainsCubeId = null;
+  specialVillageResident = null;
+  sylvanFriendAskedBy = null;
+  sylvanFriendThanksSaid = false;
+  restoredEnemyAreas = new Set();
   environmentState.springSince = null;
   environmentState.cloudSince = null;
   Object.assign(castleState, {
@@ -64,7 +83,7 @@ function resetMapState() {
     standY: 0
   });
   Object.values(areas).forEach((area) => {
-    area.enemies = area.enemies.filter((enemy) => !enemy.permanentResident && !enemy.regionBoss);
+    area.enemies = area.enemies.filter((enemy) => !enemy.permanentResident && !enemy.regionBoss && !enemy.earlyKyle);
     area.healed = !!area.signs || !!area.houseInterior || !!area.world?.parent || area === areas.castleGrounds;
     area.enemies.forEach((enemy) => {
       enemy.restored = false;
@@ -78,6 +97,12 @@ function resetMapState() {
       enemy.route = [];
       enemy.routeUntil = 0;
       enemy.talked = false;
+      delete enemy.plainsFirstCubeDialogueSaid;
+      delete enemy.plainsFollowupDialogueSaid;
+      delete enemy.villageBadDaySaid;
+      delete enemy.villageLeftAfterBadDay;
+      delete enemy.villageApologyReady;
+      delete enemy.villageApologySaid;
       enemy.facing = 1;
       delete enemy.gazeX;
       delete enemy.gazeY;
@@ -94,11 +119,13 @@ function resetMapState() {
     });
   });
   initializeRegionalBosses();
+  ensureEarlyKyle();
   regionDirectory.nodes.forEach((node) => {
     node.unlocked = node.kind !== "village";
   });
   updatePlainsRestoration();
   currentAreaId = "sylvan";
+  chooseSpecialVillageResident();
   updateVillageLocks();
 }
 
@@ -137,6 +164,18 @@ function initializeBoss() {
     waitUntil: 0
   }];
   initializeRegionalBosses();
+  ensureEarlyKyle();
+}
+
+function ensureEarlyKyle() {
+  if (!earlyKyleSpawnOnLoad || areas.pristineCastle.enemies.some((enemy) => enemy.id === "early-kyle")) return;
+  const x = config.tileSize + 7;
+  const y = 8 * config.tileSize + 5;
+  areas.pristineCastle.enemies.push({
+    id: "early-kyle", name: "Kyle", kind: "easter-egg", visual: "boss", originArea: "pristineCastle",
+    x, y, spawnX: x, spawnY: y, width: 42, height: 48, restored: true, relocated: false,
+    stationary: true, facing: 1, talked: false, earlyKyle: true
+  });
 }
 
 function initializeRegionalBosses() {
@@ -411,6 +450,7 @@ function enterArea(areaId) {
   clearInteractionState();
   gameMode = "area";
   currentAreaId = areaId;
+  markSpecialVillageEntry(areaId);
   player.x = area.start.x * config.tileSize + (config.tileSize - player.width) / 2;
   player.y = area.start.y * config.tileSize + 2;
   contactLockedUntil = performance.now() + config.contactCooldown;
@@ -527,6 +567,22 @@ function moveVillageResidents() {
   villageResidents().forEach((resident) => {
     initializeVillageResident(resident);
     if (pauseResidentConversation(resident, positionedResident(resident), now)) return;
+    if (resident.id === "sylvan-cube-9") {
+      const friend = villageResidents().find((candidate) => candidate.id === "sylvan-cube-6");
+      if (friend) {
+        const dx = friend.villageX - resident.villageX;
+        const dy = friend.villageY - resident.villageY;
+        const distance = Math.hypot(dx, dy);
+        if (distance > 64) {
+          const next = { ...resident, x: resident.villageX + dx / distance * 0.55, y: resident.villageY + dy / distance * 0.55 };
+          if (!collidesWithBlockedTile(next)) {
+            resident.villageX = next.x; resident.villageY = next.y;
+            if (dx) resident.facing = Math.sign(dx);
+            return;
+          }
+        }
+      }
+    }
     if (now < resident.villageWaitUntil) return;
     if (now >= resident.villageMovingUntil) {
       const directions = [[1, 0], [-1, 0], [0, 1], [0, -1], [0, 0]];
@@ -646,6 +702,10 @@ function retreatGuardian(enemy) {
 function moveEnemy(enemy) {
   const now = performance.now();
   if (pauseResidentConversation(enemy, enemy, now)) return;
+  if (enemy.restored && enemy.id === "sylvan-cube-9") {
+    const friend = areas[currentAreaId].enemies.find((candidate) => candidate.id === "sylvan-cube-6" && candidate.restored && !candidate.relocated);
+    if (friend && followFriend(enemy, friend, enemyMoveSpeed(enemy), 58)) return;
+  }
   const restoredTarget = enemy.restored ? null : nearestRestoredCube(enemy, config.tileSize * 4);
 
   if (enemy.restored && enemy.visual === "ground") {
@@ -697,6 +757,19 @@ function moveEnemy(enemy) {
   enemy.x = next.x;
   enemy.y = next.y;
   if (enemy.moveX) enemy.facing = Math.sign(enemy.moveX);
+}
+
+function followFriend(follower, leader, speed, minimumDistance) {
+  const dx = leader.x - follower.x;
+  const dy = leader.y - follower.y;
+  const distance = Math.hypot(dx, dy);
+  if (distance <= minimumDistance) return true;
+  const next = { ...follower, x: follower.x + dx / distance * speed, y: follower.y + dy / distance * speed };
+  if (collidesWithBlockedTile(next)) return false;
+  follower.x = next.x;
+  follower.y = next.y;
+  if (dx) follower.facing = Math.sign(dx);
+  return true;
 }
 
 function nearestRestoredCube(enemy, range) {
@@ -1031,6 +1104,41 @@ function villageResidents(areaId = currentAreaId) {
   return areas[sourceId].enemies.filter((enemy) => enemy.restored && enemy.relocated && enemy.kind !== "boss" && !enemy.permanentResident);
 }
 
+function chooseSpecialVillageResident() {
+  const candidates = ["sylvan", "azureApex"].flatMap((areaId) => areas[areaId].enemies)
+    .filter((enemy) => enemy.kind !== "boss" && !enemy.permanentResident);
+  specialVillageResident = candidates[Math.floor(Math.random() * candidates.length)] || null;
+}
+
+function sylvanFriendDialogue(enemy) {
+  const friendIds = ["sylvan-cube-6", "sylvan-cube-9"];
+  if (!friendIds.includes(enemy.id)) return null;
+  const friends = friendIds.map((id) => areas.sylvan.enemies.find((candidate) => candidate.id === id));
+  const other = friends.find((candidate) => candidate !== enemy);
+  if (sylvanFriendThanksSaid) return "Hi there!";
+  if (other?.restored) {
+    if (!sylvanFriendAskedBy) return null;
+    if (enemy.id === sylvanFriendAskedBy) {
+      sylvanFriendThanksSaid = true;
+      return "thank you for saving my friend!";
+    }
+    return null;
+  }
+  sylvanFriendAskedBy = sylvanFriendAskedBy || enemy.id;
+  return enemy.id === sylvanFriendAskedBy ? "Can you please save my friend? i don't know where he is!" : null;
+}
+
+function markSpecialVillageDeparture(areaId) {
+  if (specialVillageResident?.homeAreaId === areaId && specialVillageResident.villageBadDaySaid) {
+    specialVillageResident.villageLeftAfterBadDay = true;
+  }
+}
+
+function markSpecialVillageEntry(areaId) {
+  if (specialVillageResident?.homeAreaId === areaId && specialVillageResident.villageLeftAfterBadDay) {
+    specialVillageResident.villageApologyReady = true;
+  }
+}
 function residentPosition(index, villageAreaId = currentAreaId) {
   const home = areas[villageAreaId]?.homeSlots?.[index];
   if (home) {
@@ -1151,12 +1259,24 @@ function interactWithCastle(feature) {
   }
 
   if (feature === "rocks") {
+    if (castleState.exitCleared) return;
     if (!playerState.hasStaff) {
-      showTemporaryPrompt("The rocks will not move. You need your staff.");
+      showTemporaryPrompt("You try to break the rocks, but... it turns out your weak.");
       return;
     }
+    const waitedOnThrone = castleState.sittingStartedAt > 0 && performance.now() - castleState.sittingStartedAt >= 5000;
+    const swungWhileMoving = keys.has("arrowleft") || keys.has("a") || keys.has("arrowright") || keys.has("d") || keys.has("arrowdown") || keys.has("s");
     castleState.exitCleared = true;
-    showTemporaryPrompt("The staff flashes. The fallen rocks break apart!");
+    if (waitedOnThrone) {
+      playerState.maxHealth += 1;
+      playerState.health = Math.min(playerState.maxHealth, playerState.health + 1);
+      updateHud();
+      showTemporaryPrompt("patience is always the answer.");
+    } else if (swungWhileMoving) {
+      showTemporaryPrompt("You hit the rocks with your staff with all your might. they shatter, but now your staff is dented.");
+    } else {
+      showTemporaryPrompt("You hit the rocks with your staff. they shatter into pieces.");
+    }
     return;
   }
 
@@ -1178,7 +1298,6 @@ function sitOnThrone() {
   player.y = throne.y * config.tileSize + 112 - player.height - 6;
   player.facing = 1;
   player.view = "front";
-  showTemporaryPrompt("The throne remembers its King.", 1800);
 }
 
 function standFromThrone() {
@@ -1275,7 +1394,7 @@ function checkAreaEncounters() {
   if (currentScreen !== "game" || gameMode !== "area" || performance.now() < contactLockedUntil) return;
   const overlaps = candidate => !bossDefeated(candidate) && rectanglesOverlap(player, candidate);
   const enemies = areas[currentAreaId].enemies;
-  const enemy = enemies.find(candidate => candidate.regionBoss && overlaps(candidate))
+  const enemy = visibleAreaEnemies().find(candidate => candidate.regionBoss && overlaps(candidate))
     || enemies.find(candidate => candidate.kind !== "boss" && overlaps(candidate));
   if (enemy) startBattle(enemy);
 }
@@ -1295,9 +1414,51 @@ function updatePlainsRestoration() {
 
 function talkToNpc() {
   if (currentScreen === "game" && promptMode === "talk") {
+    if (activeEnemy?.earlyKyle) {
+      const returnBoss = areas.palaceUpper.enemies.find((enemy) => enemy.id === "kyle-boss");
+      if (returnBoss) { returnBoss.x = returnBoss.spawnX; returnBoss.y = returnBoss.spawnY; }
+      activeEnemy.relocated = true;
+      showTemporaryPrompt("Uh... i wasn't expecting you to be so early. BYE!", 3000);
+      return;
+    }
     if (!activeEnemy?.restored) return;
     talkingResident = activeEnemy;
     const positioned = activeEnemy.relocated ? positionedResident(activeEnemy) : activeEnemy;
+    const say = (text) => {
+      showTemporaryPrompt(text, 4500);
+      pauseResidentConversation(activeEnemy, positioned, performance.now());
+    };
+    const friendLine = sylvanFriendDialogue(activeEnemy);
+    if (friendLine) {
+      say(friendLine);
+      return;
+    }
+    if (activeEnemy.id === firstControlledPlainsCubeId) {
+      if (!activeEnemy.plainsFirstCubeDialogueSaid) {
+        activeEnemy.plainsFirstCubeDialogueSaid = true;
+        say("Thanks for saving me! So... where do I go now? There isn't a village nearby.");
+      } else if (!activeEnemy.plainsFollowupDialogueSaid) {
+        activeEnemy.plainsFollowupDialogueSaid = true;
+        say("You never answered my question.");
+      } else {
+        say("...");
+      }
+      return;
+    }
+    const isSpecialVillageNpc = activeEnemy === specialVillageResident
+      && activeEnemy.relocated
+      && villageAreaForSource(activeEnemy.originArea) === currentAreaId
+      && areas[activeEnemy.originArea].healed;
+    if (isSpecialVillageNpc && !activeEnemy.villageBadDaySaid) {
+      activeEnemy.villageBadDaySaid = true;
+      say("Wow... you just HAD to talk to me. I'm already having a bad day!");
+      return;
+    }
+    if (isSpecialVillageNpc && activeEnemy.villageApologyReady && !activeEnemy.villageApologySaid) {
+      activeEnemy.villageApologySaid = true;
+      say("Hey... sorry about earlier. I got chased by one of those purple things for a long time.");
+      return;
+    }
     let message;
     if (activeEnemy?.visual === "flying") {
       message = activeEnemy.talked
@@ -1313,7 +1474,6 @@ function talkToNpc() {
         : "ugh, I keep hearing a roaring sound and a loud banging coming from the mountain.";
     }
     
-    showTemporaryPrompt(message, 4500);
-    pauseResidentConversation(activeEnemy, positioned, performance.now());
+    say(message);
   }
 }

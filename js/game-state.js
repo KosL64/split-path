@@ -6,6 +6,7 @@ const screens = {
   game: document.querySelector("#game-screen"),
   battle: document.querySelector("#battle-screen"),
   lose: document.querySelector("#lose-screen"),
+  credits: document.querySelector("#credits-screen"),
   upgrades: document.querySelector("#upgrade-screen")
 };
 

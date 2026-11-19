@@ -5,6 +5,7 @@ const os = require('node:os');
 const http = require('node:http');
 const { execFileSync } = require('node:child_process');
 const { pathToFileURL } = require('node:url');
+const verifyBranchIntegration = require('./integration-checks.cjs');
 
 let playwright;
 try { playwright = require('playwright'); }
@@ -662,11 +663,6 @@ async function verifyGuardianProgression(page) {
       player.x = boss.x;
       player.y = boss.y;
       playerState.hasStaff = true;
-      if (region === 'azureApex') {
-        enterArea('controlledPalace');
-        player.x = regionalBossStates[region].palaceEnemy.x;
-        player.y = regionalBossStates[region].palaceEnemy.y;
-      }
       contactLockedUntil = 0;
       checkAreaEncounters();
       check(currentScreen === 'battle' && activeEnemy.regionBoss === region, `${region}: contact starts the guardian battle without Z`);
@@ -876,13 +872,13 @@ async function verifyScalingAndDagger(page) {
     }, target);
     await page.locator('#defend-action').click();
     await page.evaluate(() => defendAction());
-    await page.waitForFunction(() => currentScreen === 'upgrades');
+    await page.waitForFunction(target => currentScreen === (target === 'kyle' ? 'credits' : 'upgrades'), target);
     const result = await page.evaluate(() => ({ health: playerState.health, points: playerState.divinePoints,
       restored: activeEnemy.restored, control: activeEnemy.control }));
     assert.equal(result.health, before.health, `${target}: test defense prevents enemy damage`);
     assert.equal(result.points, before.points + (target === 'soul' ? 10 : 5), `${target}: normal reward granted exactly once`);
     assert.ok(result.restored && result.control === 0, `${target}: Defend restores the opponent`);
-    await page.locator('#close-upgrades').click();
+    if (target !== 'kyle') await page.locator('#close-upgrades').click();
   }
   assert.equal(await page.evaluate(() => Object.values(regionalBossStates).every(state => state.defeated)
     && areas.azureApex.enemies.filter(enemy => enemy.permanentResident).length === 6), true,
@@ -1158,6 +1154,16 @@ async function verifyAzureMountainUpdate(page, label) {
     browser = await playwright.chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || 'msedge' });
     const origin = `http://127.0.0.1:${server.address().port}`;
     const desktop = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    if (process.argv.includes('--integration-only')) {
+      await desktop.addInitScript(() => { Math.random = () => 0.5; });
+      await desktop.goto(origin + '/index.html');
+      await verifyBranchIntegration(desktop, 'desktop');
+      const mobile = await browser.newPage({ viewport: { width: 390, height: 844 } });
+      await mobile.addInitScript(() => { Math.random = () => 0.5; });
+      await mobile.goto(pathToFileURL(path.join(root, 'index.html')).href);
+      await verifyBranchIntegration(mobile, 'mobile-local');
+      return;
+    }
     if (process.argv.includes('--azure-update-only')) {
       await desktop.goto(origin + '/index.html');
       await verifyAzureMountainUpdate(desktop, 'desktop');
@@ -1229,6 +1235,7 @@ async function verifyAzureMountainUpdate(page, label) {
     await verifyOverworld(desktop, 'desktop');
     await verifyLatestRequests(desktop, 'desktop');
     await verifyAzureMountainUpdate(desktop, 'desktop');
+    await verifyBranchIntegration(desktop, 'desktop');
     await desktop.goto(origin + '/index.html');
     await verifyTitleAndStory(desktop, 'desktop');
     if (baseline) {
@@ -1252,6 +1259,7 @@ async function verifyAzureMountainUpdate(page, label) {
     await verifyOverworld(local, 'mobile-local');
     await verifyLatestRequests(local, 'mobile-local');
     await verifyAzureMountainUpdate(local, 'mobile-local');
+    await verifyBranchIntegration(local, 'mobile-local');
   } finally {
     if (browser) await browser.close();
     await new Promise(resolve => server.close(resolve));

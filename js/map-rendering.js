@@ -690,7 +690,7 @@ function drawEnemy(enemy, cameraX, cameraY) {
   const y = enemy.y - cameraY;
 
   const bossSprite = enemy.regionBoss ? regionalBossSprites[enemy.regionBoss] : kyleSprite;
-  if (enemy.kind === "boss" && bossSprite.complete && bossSprite.naturalWidth > 0) {
+  if ((enemy.kind === "boss" || enemy.earlyKyle) && bossSprite.complete && bossSprite.naturalWidth > 0) {
     ctx.save();
     ctx.fillStyle = "rgba(0,0,0,.32)";
     ctx.beginPath();
@@ -702,7 +702,7 @@ function drawEnemy(enemy, cameraX, cameraY) {
     ctx.restore();
     ctx.font = "900 13px Trebuchet MS";
     ctx.fillStyle = "#f2c95f";
-    ctx.fillText(`${enemy.name} | Lv ${enemy.level}`, x - 32, y - 65);
+    ctx.fillText(enemy.earlyKyle ? "Kyle" : `${enemy.name} | Lv ${enemy.level}`, x - 32, y - 65);
     return;
   }
 

@@ -427,6 +427,26 @@ meter {
   to { left: 100%; }
 }
 
+.battle-panel { position: relative; }
+#battle-skillcheck { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
+#battle-skillcheck.hidden { display: none; }
+#skillcheck-hit {
+  position: absolute; width: 104px; height: 104px; min-height: 104px;
+  transform: translate(-50%, -50%); border-radius: 50%; padding: 12px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: #203b35; border: 3px solid #85d7c2; color: #f3eee1;
+  pointer-events: auto; font-size: .75rem;
+}
+.life-steal-check #skillcheck-hit {
+  width: 80px; height: 80px; min-height: 80px; padding: 6px;
+  background: #36283e; border-color: #bf9bce;
+}
+.skillcheck-ring { position: absolute; inset: -3px; border: 3px solid #f3eee1; border-radius: 50%; pointer-events: none; }
+.circle-running .skillcheck-ring { animation: circle-skillcheck var(--check-duration) linear forwards; }
+#skillcheck-label, #skillcheck-hit kbd { position: relative; z-index: 1; }
+#skillcheck-hit kbd { font: inherit; margin-top: 5px; }
+@keyframes circle-skillcheck { from { transform: scale(1.6); } to { transform: scale(.4); } }
+
 .battle-actions {
   display: flex;
   gap: 12px;

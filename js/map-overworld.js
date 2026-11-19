@@ -118,6 +118,7 @@ function moveOverworldPlayer(next) {
   if (changedRegion) {
     finishAreaDeparture();
     currentAreaId = targetId;
+    markSpecialVillageEntry(targetId);
     clearInteractionState();
     contactLockedUntil = performance.now() + config.contactCooldown;
   }
@@ -137,6 +138,7 @@ function worldRectBlocked(rect) {
 }
 
 function finishAreaDeparture() {
+  markSpecialVillageDeparture(currentAreaId);
   relocateRestoredEnemies(currentAreaId);
   areas[currentAreaId].enemies.forEach(enemy => {
     enemy.chasing = false;

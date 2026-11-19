@@ -98,6 +98,7 @@ function updateHud() {
 function startBattle(enemy) {
   if (bossDefeated(enemy) || battleBusy) return;
   clearAttackTiming();
+  clearSkillChecks();
   window.clearTimeout(battleTimer);
   soulSpellUsed = false;
   enemyStunTurns = 0;
@@ -240,6 +241,7 @@ function rollCriticalHit() {
 }
 
 function showLoseScreen() {
+  clearSkillChecks();
   clearAttackTiming();
   window.clearTimeout(battleTimer);
   setBattleButtons(false);
@@ -343,7 +345,13 @@ function resolvePlayerAttack(bonus = 0) {
   const timingText = bonus === 0.25 ? "Perfect! +25%. " : bonus === 0.2 ? "Center hit! +20%. " : "";
   document.querySelector("#battle-message").textContent = `${timingText}${critical ? "Critical hit! " : ""}${verb} reduces Control by ${power}.${doubleStrike ? " Double attack!" : ""}`;
   const lifeStealHeal = playerState.lifeSteal ? Math.max(1, Math.round(power / 2)) : 0;
-  const totalHeal = lifeStealHeal + extraHeal;
+  const finishAttack = (bonus) => completePlayerAttack(enemy, lifeStealHeal + Math.ceil(lifeStealHeal * bonus) + extraHeal, hitCount);
+  if (playerState.lifeSteal) startSkillChecks('lifeSteal', skillCheckSettings.lifeStealCount, finishAttack);
+  else finishAttack(0);
+}
+
+function completePlayerAttack(enemy, totalHeal, hitCount) {
+  if (currentScreen !== 'battle' || activeEnemy !== enemy || enemy.restored) return;
   if (totalHeal) { playerState.health = Math.min(playerState.maxHealth, playerState.health + totalHeal); document.querySelector("#battle-message").textContent += ` You restore ${totalHeal} health.`; }
   applyAttackMilestones(hitCount); updateBattleStats();
   if (activeEnemy.control === 0) { finishRestoration(); return; }
@@ -386,11 +394,20 @@ function healAction() {
   useHeal();
 }
 function useHeal() {
+  if (currentScreen !== 'battle' || battleBusy || !activeEnemy || bossDefeated(activeEnemy)) return;
   setBattleButtons(true); playBattleEffect("heal-effect");
-  const restored = Math.min(playerState.healAmount, playerState.maxHealth - playerState.health);
-  playerState.health += restored;
-  document.querySelector("#battle-message").textContent = restored ? `Warm light restores ${restored} health.` : "Your health is already full.";
-  updateBattleStats(); queueEnemyTurn();
+  const enemy = activeEnemy;
+  const finishHeal = (bonus) => {
+    if (currentScreen !== 'battle' || activeEnemy !== enemy || enemy.restored) return;
+    const amount = Math.round(playerState.healAmount * (1 + bonus));
+    const restored = Math.min(amount, playerState.maxHealth - playerState.health);
+    playerState.health += restored;
+    document.querySelector('#battle-message').textContent = restored ? `Warm light restores ${restored} health.` : 'Your health is already full.';
+    updateBattleStats();
+    queueEnemyTurn();
+  };
+  if (playerState.upgrades.health) startSkillChecks('heal', 1, finishHeal);
+  else finishHeal(0);
 }
 function strengthenAction(stat) {
   if (battleBusy || playerState.health <= 1) return;
@@ -404,6 +421,7 @@ function finishRestoration() {
   if (!activeEnemy || bossDefeated(activeEnemy)) return;
   const restoredEnemy = activeEnemy;
   clearAttackTiming();
+  clearSkillChecks();
   window.clearTimeout(battleTimer);
   const reward = restoredEnemy.kind !== "boss" && restoredEnemy.visual === "flying" ? 10 : config.restoreReward;
   playerState.divinePoints += reward;
@@ -418,6 +436,13 @@ function finishRestoration() {
     if (currentScreen !== "battle" || activeEnemy !== restoredEnemy) return;
     contactLockedUntil = performance.now() + config.contactCooldown;
     setBattleButtons(false);
+    if (restoredEnemy.id === "kyle-boss") {
+      document.querySelector("#credits-message").textContent = restoredEnemyAreas.size === 2
+        ? "I think you missed a spot!"
+        : "Thank you for playing Split Path.";
+      showScreen("credits");
+      return;
+    }
     showScreen("upgrades");
     updateUpgradeButtons();
     document.querySelector("#upgrade-message").textContent = restoredEnemy.regionBoss
@@ -529,6 +554,7 @@ function updateUpgradeButtons() {
   updateHud();
 }
 function resetGame() {
+  clearSkillChecks();
   daggerTestMode.inspections = 0;
   daggerTestMode.enabled = false;
   window.clearTimeout(restorationTimer);
@@ -613,10 +639,12 @@ document.querySelector("#upgrade-button").addEventListener("click", () => {
 });
 document.querySelector("#close-upgrades").addEventListener("click", () => showScreen("game"));
 document.querySelector("#reset-button").addEventListener("click", resetGame);
+document.querySelector("#credits-return").addEventListener("click", () => { resetGame(); showScreen("title"); });
 document.querySelector("#attack-action").addEventListener("click", attackAction);
 document.querySelector("#light-spell-action").addEventListener("click", lightSpellAction);
 document.querySelector("#soul-spell-action").addEventListener("click", soulSpellAction);
 document.querySelector("#attack-boost").addEventListener("click", boostPlayerAttack);
+document.querySelector('#skillcheck-hit').addEventListener('click', submitSkillCheck);
 document.querySelector("#defend-action").addEventListener("click", defendAction);
 document.querySelector("#heal-action").addEventListener("click", healAction);
 document.querySelector("#heal-now-action").addEventListener("click", useHeal);
@@ -636,7 +664,10 @@ window.addEventListener("keydown", (event) => {
 
   if (currentScreen === "battle" && key === "z") {
     event.preventDefault();
-    if (!event.repeat) boostPlayerAttack();
+    if (!event.repeat) {
+      if (activeSkillCheck) submitSkillCheck();
+      else boostPlayerAttack();
+    }
     return;
   }
 
@@ -680,6 +711,7 @@ initializeOverworld();
 initializeAreaRockDecorations();
 initializeAreaEnemies();
 initializeBoss();
+chooseSpecialVillageResident();
 updateHud();
 updateBattleActions();
 renderStory();
