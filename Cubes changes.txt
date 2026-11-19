@@ -1,0 +1,7 @@
+Hey. some minor changes. 
+
+1. Make the controlled plains cubes and souls just... hang out on the bridge. they wont move though. just... they will be on each side of the bridge
+
+2. Make the Azure Apex and Controlled Plains cubes and souls to look just like the ones. dont use the sprite that you made and are using... use the ones that i made and are in Sylvan. 
+
+3. make the black description bar in the top left of the canvas have a high z index so the player doesn't go on top of it. 
