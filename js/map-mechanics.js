@@ -567,6 +567,7 @@ function moveVillageResidents() {
   villageResidents().forEach((resident) => {
     initializeVillageResident(resident);
     if (pauseResidentConversation(resident, positionedResident(resident), now)) return;
+    if (resident.homeAreaId === "castleGrounds") return;
     if (resident.id === "sylvan-cube-9") {
       const friend = villageResidents().find((candidate) => candidate.id === "sylvan-cube-6");
       if (friend) {
@@ -1099,7 +1100,7 @@ function villageAreaForSource(sourceId) {
 }
 
 function villageResidents(areaId = currentAreaId) {
-  const sourceId = villageSourceFor(areaId);
+  const sourceId = areaId === "castleGrounds" ? "controlledPlains" : villageSourceFor(areaId);
   if (!sourceId) return [];
   return areas[sourceId].enemies.filter((enemy) => enemy.restored && enemy.relocated && enemy.kind !== "boss" && !enemy.permanentResident);
 }
@@ -1140,6 +1141,14 @@ function markSpecialVillageEntry(areaId) {
   }
 }
 function residentPosition(index, villageAreaId = currentAreaId) {
+  if (villageAreaId === "castleGrounds") {
+    // Fill the bridge edges first, then its northern approaches; keep the center clear.
+    const approachIndex = index - 18;
+    const col = index < 18 ? (index % 2 ? 71 : 68)
+      : [67, 72, 66, 73, 65, 74][approachIndex % 6];
+    const row = index < 18 ? 22 + Math.floor(index / 2) : 21 - Math.floor(approachIndex / 6);
+    return { x: col * config.tileSize + 7, y: row * config.tileSize + 5 };
+  }
   const home = areas[villageAreaId]?.homeSlots?.[index];
   if (home) {
     return {
@@ -1160,7 +1169,7 @@ function initializeVillageResident(resident) {
   const usedSlots = new Set(source.filter((enemy) => Number.isInteger(enemy.villageSlot)).map((enemy) => enemy.villageSlot));
   let slot = 0;
   while (usedSlots.has(slot)) slot += 1;
-  const villageAreaId = villageAreaForSource(resident.originArea);
+  const villageAreaId = resident.originArea === "controlledPlains" ? "castleGrounds" : villageAreaForSource(resident.originArea);
   const position = residentPosition(slot, villageAreaId);
   resident.villageSlot = slot;
   resident.homeAreaId = villageAreaId;

@@ -5,9 +5,41 @@ const os = require('node:os');
 module.exports = async function verifyBranchIntegration(page, label) {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
+  await page.waitForFunction(() => readySylvanSprite('ground') && readySylvanSprite('flying'));
   const checks = await page.evaluate(() => {
     const passed = [];
     const check = (value, message) => { if (!value) throw new Error(message); passed.push(message); };
+    resetGame(); showScreen('game');
+    enterArea('controlledPlains');
+    ordinaryEnemies(areas.controlledPlains).forEach(enemy => restoreMapEnemy(enemy, 'controlledPlains'));
+    finishAreaDeparture(); enterArea('castleGrounds');
+    const bridgeResidents = villageResidents();
+    check(bridgeResidents.length === 55, 'All 55 restored Plains residents reach the bridge');
+    const positions = bridgeResidents.map(positionedResident);
+    check(new Set(positions.map(resident => `${resident.x},${resident.y}`)).size === 55
+      && positions.every(resident => !collidesWithBlockedTile(resident)), 'Bridge and approach slots are unique and passable');
+    check(positions.every(resident => ![69, 70].includes(Math.floor(resident.x / config.tileSize))), 'Bridge center stays clear');
+    for (let frame = 0; frame < 60; frame += 1) moveEnemies();
+    check(bridgeResidents.every((resident, index) => resident.villageX === positions[index].x && resident.villageY === positions[index].y), 'Bridge residents remain stationary');
+    finishAreaDeparture(); enterArea('sylvan'); finishAreaDeparture(); enterArea('castleGrounds');
+    check(villageResidents().length === 55 && visibleAreaEnemies('controlledPlains').every(enemy => enemy.kind === 'boss'), 'Travel preserves bridge residents without field duplicates');
+    const originalDrawImage = ctx.drawImage;
+    const sprites = [];
+    ctx.drawImage = function(sprite, ...args) { sprites.push(sprite); return originalDrawImage.call(this, sprite, ...args); };
+    for (const originArea of ['azureApex', 'controlledPlains']) {
+      for (const visual of ['ground', 'flying']) {
+        drawEnemy({ originArea, visual, x: 100, y: 100, width: 36, height: 40, level: 1, facing: -1 }, 0, 0);
+        check(sprites.at(-1) === sylvanSprites[visual], `${originArea} uses Luciano's ${visual} artwork`);
+      }
+    }
+    ctx.drawImage = originalDrawImage;
+    const realPlayer = drawPlayer, realLabel = drawMapLabel;
+    const drawOrder = [];
+    drawPlayer = () => drawOrder.push('player'); drawMapLabel = () => drawOrder.push('label');
+    drawWorld(); check(drawOrder.at(-1) === 'label' && drawOrder.includes('player'), 'Exterior panel draws above the player');
+    enterArea('pristineCastle'); drawOrder.length = 0; drawWorld();
+    check(drawOrder.join(',') === 'player,label', 'Interior panel draws above the player');
+    drawPlayer = realPlayer; drawMapLabel = realLabel;
     resetGame(); showScreen('game');
     check(specialVillageResident && ['sylvan', 'azureApex'].includes(specialVillageResident.originArea)
       && !specialVillageResident.permanentResident, 'Special resident is eligible');
@@ -120,6 +152,15 @@ module.exports = async function verifyBranchIntegration(page, label) {
   await page.locator('#credits-return').click();
   assert.equal(await page.evaluate(() => currentScreen), 'title');
   assert.equal(await page.evaluate(() => areas.palaceUpper.enemies[0].restored), false);
+  await page.evaluate(() => {
+    resetGame(); showScreen('game'); enterArea('controlledPlains');
+    ordinaryEnemies(areas.controlledPlains).forEach(enemy => restoreMapEnemy(enemy, 'controlledPlains'));
+    finishAreaDeparture(); enterArea('castleGrounds');
+    player.x = 70 * config.tileSize; player.y = 23 * config.tileSize;
+    updateCamera(); drawWorld();
+  });
+  await page.locator('#game-canvas').screenshot({ path: path.join(os.tmpdir(), `split-path-bridge-residents-${label}.png`) });
+  await page.evaluate(() => { resetGame(); showScreen('title'); });
   assert.deepEqual(errors, []);
   console.log(`${label}: circle timing, three-stage Life Steal, misses, cleanup and credits pass.`);
 };

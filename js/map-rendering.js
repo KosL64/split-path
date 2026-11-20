@@ -6,12 +6,13 @@ function drawWorld() {
     drawOverworld();
     drawOverworldActors();
   } else {
-    drawAreaMap();
+    drawAreaMap(currentAreaId, areas[currentAreaId].cameraX, areas[currentAreaId].cameraY, false);
     drawPlayer();
   }
   drawWorldAtmosphere();
   if (exterior) drawMapLabel(landscapeLocationName(), areas[currentAreaId].world.parent ? "Village"
     : currentAreaId === "castleGrounds" ? "Pristine Bridge | Pristine River" : "");
+  else drawAreaLabel(currentAreaId);
 }
 
 function drawAreaMap(areaId = currentAreaId, cameraX = areas[areaId].cameraX, cameraY = areas[areaId].cameraY, label = true, actors = true) {
@@ -57,6 +58,11 @@ function drawAreaMap(areaId = currentAreaId, cameraX = areas[areaId].cameraX, ca
     drawVillageResidents(cameraX, cameraY, areaId);
   }
   if (!label) return;
+  drawAreaLabel(areaId);
+}
+
+function drawAreaLabel(areaId) {
+  const area = areas[areaId];
   const subtitle = areaId === "pristineCastle"
     ? playerState.hasStaff
       ? castleState.exitCleared ? "The road to the kingdom is open." : "Use the staff to clear the fallen rocks."
@@ -712,7 +718,8 @@ function drawEnemy(enemy, cameraX, cameraY) {
     return;
   }
 
-  const sprite = enemy.originArea === "sylvan" ? readySylvanSprite(enemy.visual) : null;
+  const sprite = ["sylvan", "azureApex", "controlledPlains"].includes(enemy.originArea)
+    ? readySylvanSprite(enemy.visual) : null;
   if (sprite) {
     const flying = enemy.visual === "flying";
     const width = enemy.width + 6;
