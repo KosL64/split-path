@@ -1,0 +1,10 @@
+The 2nd official HUGE update: Save Files
+
+1. Add 4 save files. When you press play... instead of showing the epilogue, it shows the save files. the epilogue only shows up when you start a new save file. It should kind of be like hollow knight save files. 
+(basically... when you press play... another screen will show up with the 4 save files)
+
+2. Stickers on save files: so... say... your playing in your save file and you find some easter eggs, like the patience is always the answer, a little sticker will appear around your profile. If you find them all... then they make kind of like a little banner around your save file. (For now... Only make the patience is always the answer a sticker that appears on your save file... because Mr. Aaron reads these notes i send him... and these are supposed to be easter eggs for HIM TOO!!! XD) (also... just for now, make every sticker a small colored circle on the border of the save file. the border should be small btw). 
+
+3. now... again. like hollow knight... on the right side of the save file... have a little button with a red garbage can. if you press it... you delete that specific save file. A screen will appear that will say, do you want to delete your save file, and if you press yes instead of no, then it deletes all your progress in that save file. 
+
+(Even if you refresh the game... not reset button, refresh, the progress in all your save files should save. Same for all the stickers on your save file. they should stay too. This basically makes the refresh button useless... but whatever. maybe there is a still feature that it does that i dont know). 
