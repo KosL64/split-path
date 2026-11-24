@@ -73,7 +73,9 @@ button:disabled {
 .save-open span { color: var(--muted); line-height: 1.5; font-weight: 400; }
 .save-delete { align-self: center; margin: 12px; padding: 10px; color: var(--rose); background: transparent; }
 .save-delete svg { width: 22px; height: 22px; display: block; }
-.save-sticker { position: absolute; top: -6px; left: 24px; width: 12px; height: 12px; border-radius: 50%; background: var(--aqua); border: 2px solid var(--dark); }
+.save-sticker { position: absolute; top: -10px; width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--dark); box-shadow: 0 0 0 1px rgba(255,255,255,.28); }
+.save-sticker.sticker-blue { background: #287bff; }
+.save-sticker.sticker-magenta { background: #e34bbd; }
 #save-storage-note { color: var(--muted); font-size: .9rem; }
 #save-confirm { max-width: min(92vw, 480px); color: var(--ink); background: #24222a; border: 1px solid var(--line); border-radius: 12px; padding: 24px; }
 #save-confirm::backdrop { background: rgba(0,0,0,.75); }

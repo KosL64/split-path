@@ -165,13 +165,16 @@ function updateBattleActions() {
   const hasStrengthen = playerState.upgrades.strengthen > 0;
   document.querySelector("#attack-action").textContent = playerState.magic ? "Magic" : "Attack";
   document.querySelector("#attack-action").setAttribute("aria-expanded", String(playerState.magic && magicMenuOpen));
-  document.querySelector("#light-spell-action").classList.toggle("hidden", !playerState.magic || !magicMenuOpen);
-  document.querySelector("#soul-spell-action").classList.toggle("hidden", !playerState.magic || !magicMenuOpen);
+  const starfallUnlocked = daggerTestMode.enabled && playerState.magic;
+  document.querySelector("#light-spell-action").classList.toggle("hidden", !playerState.magic || !magicMenuOpen || starfallUnlocked);
+  document.querySelector("#soul-spell-action").classList.toggle("hidden", !playerState.magic || !magicMenuOpen || starfallUnlocked);
+  document.querySelector("#starfall-action").classList.toggle("hidden", !starfallUnlocked || !magicMenuOpen);
   document.querySelector("#heal-now-action").classList.toggle("hidden", !hasStrengthen || !strengthenMenuOpen);
   document.querySelector("#strengthen-attack-action").classList.toggle("hidden", !hasStrengthen || !strengthenMenuOpen);
   document.querySelector("#strengthen-defense-action").classList.toggle("hidden", !hasStrengthen || !strengthenMenuOpen);
   document.querySelector("#attack-action").disabled = battleBusy || !playerState.hasStaff;
   document.querySelector("#light-spell-action").disabled = battleBusy || !playerState.hasStaff || !playerState.magic;
+  document.querySelector("#starfall-action").disabled = battleBusy || !playerState.hasStaff || !starfallUnlocked;
   const soulButton = document.querySelector("#soul-spell-action");
   soulButton.disabled = battleBusy || !playerState.hasStaff || !playerState.magic || soulSpellUsed;
   soulButton.classList.toggle("spell-used", soulSpellUsed);
@@ -289,6 +292,16 @@ function lightSpellAction() {
     attackPower: currentAttackPower() + 2 + playerState.lightSpellBonus,
     extraHeal: 0
   });
+}
+
+function starfallAction() {
+  if (battleBusy || !activeEnemy || !playerState.magic || !playerState.hasStaff || !daggerTestMode.enabled) return;
+  magicMenuOpen = false;
+  updateBattleActions();
+  const stunTurns = playerState.soulSpellStunBonus ? 2 : 1;
+  enemyStunTurns = stunTurns;
+  performPlayerAttack({ name: "Starfall Vengence", verb: "Starfall Vengence",
+    fixedDamage: playerState.lightSpellBonus ? 55 : 50, stunTurns, areaAttack: true });
 }
 
 function soulSpellAction() {
@@ -424,6 +437,7 @@ function strengthenAction(stat) {
 function finishRestoration() {
   if (!activeEnemy || bossDefeated(activeEnemy)) return;
   const restoredEnemy = activeEnemy;
+  if (restoredEnemy.id === "kyle-boss") awardSaveSticker("kyle-defeated");
   clearAttackTiming();
   clearSkillChecks();
   window.clearTimeout(battleTimer);
@@ -650,6 +664,7 @@ document.querySelector("#credits-return").addEventListener("click", () => {
 document.querySelector("#attack-action").addEventListener("click", attackAction);
 document.querySelector("#light-spell-action").addEventListener("click", lightSpellAction);
 document.querySelector("#soul-spell-action").addEventListener("click", soulSpellAction);
+document.querySelector("#starfall-action").addEventListener("click", starfallAction);
 document.querySelector("#attack-boost").addEventListener("click", boostPlayerAttack);
 document.querySelector('#skillcheck-hit').addEventListener('click', submitSkillCheck);
 document.querySelector("#defend-action").addEventListener("click", defendAction);
@@ -693,7 +708,7 @@ window.addEventListener("keydown", (event) => {
     return;
   }
 
-  if (key === "h" && !event.repeat && currentScreen === "game" && gameMode === "area"
+  if (key === "=" && !event.repeat && currentScreen === "game" && gameMode === "area"
     && currentAreaId === "pristineCastle" && daggerTestMode.inspections >= 3 && !daggerTestMode.enabled) {
     daggerTestMode.enabled = true;
   }

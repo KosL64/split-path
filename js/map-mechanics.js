@@ -2,6 +2,7 @@
 
 let gameMode = "area";
 let currentAreaId = "sylvan";
+const shadowNightWindow = (() => { const hour = new Date().getHours(); return hour >= 20 || hour < 5; })();
 let contactLockedUntil = 0;
 let dialogueUntil = 0;
 let dialogueTimer = null;
@@ -451,6 +452,7 @@ function enterArea(areaId) {
   gameMode = "area";
   currentAreaId = areaId;
   markSpecialVillageEntry(areaId);
+  if (areaId === "controlledPlains" && !areas.controlledPlains.healed && shadowNightWindow) awardSaveSticker("night-plains");
   player.x = area.start.x * config.tileSize + (config.tileSize - player.width) / 2;
   player.y = area.start.y * config.tileSize + 2;
   contactLockedUntil = performance.now() + config.contactCooldown;
@@ -1426,6 +1428,7 @@ function updatePlainsRestoration() {
 function talkToNpc() {
   if (currentScreen === "game" && promptMode === "talk") {
     if (activeEnemy?.earlyKyle) {
+      awardSaveSticker("rare-kyle");
       const returnBoss = areas.palaceUpper.enemies.find((enemy) => enemy.id === "kyle-boss");
       if (returnBoss) { returnBoss.x = returnBoss.spawnX; returnBoss.y = returnBoss.spawnY; }
       activeEnemy.relocated = true;

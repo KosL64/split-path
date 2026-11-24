@@ -32,7 +32,7 @@ function validSave(data) {
     || !areas[data.areaId] || typeof data.introComplete !== 'boolean' || typeof data.completed !== 'boolean'
     || !Number.isFinite(data.createdAt) || !Number.isFinite(data.updatedAt)
     || Object.keys(data.world).length !== Object.keys(areas).length || Object.keys(data.world).some(id => !areas[id])
-    || !Array.isArray(data.stickers) || data.stickers.some(id => id !== 'patience')
+    || !Array.isArray(data.stickers) || data.stickers.some(id => !['patience', 'night-plains', 'rare-kyle', 'kyle-defeated'].includes(id))
     || !Number.isInteger(data.storyIndex) || data.storyIndex < 0 || data.storyIndex >= storySlides.length) return false;
   const primitive = value => ['string', 'boolean'].includes(typeof value) || (Number.isFinite(value) && Math.abs(value) <= 10000000);
   for (const [key, value] of Object.entries(playerState)) {
@@ -120,6 +120,7 @@ function awardSaveSticker(id) {
   if (activeSaveSlot !== null && saveSession && !saveSession.stickers.has(id)) {
     saveSession.stickers.add(id);
     saveNotice('A new sticker was added to your save!');
+    saveProgress();
   }
 }
 
@@ -147,10 +148,14 @@ function renderSaveSlots() {
       summary.textContent = `${data.completed ? 'Journey complete' : !data.introComplete ? 'New journey' : areas[data.areaId].name} · ${restored}/106 restored`;
       const date = document.createElement('span'); date.textContent = `Saved ${new Date(data.updatedAt).toLocaleString()}`;
       open.append(heading, summary, date);
-      if (data.stickers.includes('patience')) {
-        const sticker = document.createElement('span'); sticker.className = 'save-sticker';
-        sticker.title = 'Patience'; sticker.setAttribute('role', 'img'); sticker.setAttribute('aria-label', 'Patience sticker'); card.append(sticker);
-      }
+      const stickerNames = { patience: 'Patience', 'night-plains': 'Night Plains', 'rare-kyle': 'Rare Kyle', 'kyle-defeated': 'Kyle Defeated' };
+      data.stickers.forEach((id, stickerIndex) => {
+        const sticker = document.createElement('span');
+        sticker.className = `save-sticker ${stickerIndex % 2 ? 'sticker-magenta' : 'sticker-blue'}`;
+        sticker.style.left = `${24 + stickerIndex * 24}px`;
+        sticker.title = stickerNames[id] || 'Sticker'; sticker.setAttribute('role', 'img');
+        sticker.setAttribute('aria-label', `${stickerNames[id] || 'Game'} sticker`); card.append(sticker);
+      });
     } else {
       summary.textContent = slot.status === 'empty' ? 'Empty slot · Begin a new journey' : 'This save cannot be loaded. Other saves are unaffected.';
       open.append(heading, summary); open.disabled = slot.status === 'damaged';
