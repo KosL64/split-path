@@ -14,13 +14,14 @@ opened directly, with no build step or module server.
 | `js/map-landmarks.js` | Terrain expansion, forest, cliff gates, stairs, paths, spring healing and mountain clouds |
 | `js/game.js` | Combat, spells, timing bonuses, upgrades, story, UI bindings and game loop |
 | `js/battle-skillchecks.js` | Circular healing and Life Steal checks, timing and sequence cleanup |
+| `js/save-system.js` | Four save slots, validation, browser storage, checkpoints, stickers and save UI |
 | `js/game-state.js` | Shared player state, configuration, combat state and geometry/canvas helpers |
 | `css/styles.css` | HTML UI styling, including battle and upgrade screens |
 
 ## Loading And Shared State
 
 `index.html` loads `game-state`, `map-data`, `map-assets`, `map-mechanics`,
-`map-rendering`, `map-landmarks`, `map-overworld`, `battle-skillchecks`, then `game`. Keep that order. Only `game.js` starts world
+`map-rendering`, `map-landmarks`, `map-overworld`, `battle-skillchecks`, `save-system`, then `game`. Keep that order. Only `game.js` starts world
 initialization after all scripts have loaded. The map files define data, load
 images, and declare functions; they do not start the game loop or bind keys.
 
@@ -60,6 +61,41 @@ dependencies, so check castle interactions, movement, encounters, restoration,
 reset, spells and timing bonuses when merging.
 
 ## Verification
+
+### Browser Saves
+
+Play opens four independent save slots. Empty slots show the introduction;
+existing slots resume exploration or their completed ending. Each slot is stored
+under `split-path.save.v1.1` through `split-path.save.v1.4` in localStorage.
+Saves belong to this browser/profile and game location; they do not sync between
+computers. Moving a local-file copy or switching to a hosted URL can use a
+different storage area. No server or build step is required.
+
+Save after purchases, castle/NPC messages, safe screen transitions, victories,
+every five seconds during exploration, and when the page is hidden or closed.
+A battle keeps its pre-encounter checkpoint until victory or revival. Reloading
+mid-battle resumes exploration from that checkpoint, with a short contact grace
+period. Victory rewards and completed endings are stored before their animation
+finishes. Enemy turn timers, circular checks, pursuit, held keys and the temporary
+dagger cheat are not restored.
+
+The save includes player stats/upgrades, location, castle exit, all creature and
+resident identities/positions, guardian states and dialogue milestones. Object
+references and Sets are reconstructed after loading. Patience awards a small
+colored border sticker in that slot. Restart Save confirms before resetting only
+the active slot, including its stickers; deletion confirms on the selection
+screen. Save & Quit returns to selection. Credits retain the completed save.
+
+Save data is versioned and validated per slot. An unreadable or incompatible
+slot can be explicitly deleted without affecting the other three. Storage
+failures show an in-game message and retain the current session in memory;
+that fallback cannot survive closing the page.
+
+Run `node tests/map-regression.cjs --saves-only` for desktop HTTP and mobile
+direct-file tests of slot isolation, refresh, dialogue/boss/resident persistence,
+stickers, battle checkpoints, victory rewards, completed endings, deletion,
+restart, damaged records and unavailable storage. Save-screen screenshots go to
+the OS temporary folder.
 
 Run `node tests/map-regression.cjs` for browser checks of the map/combat boundary
 and direct local-file startup. The test uses an installed `playwright` package,

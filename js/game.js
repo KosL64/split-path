@@ -45,9 +45,12 @@ function showScreen(name) {
   Object.values(screens).forEach((screen) => screen.classList.remove("active"));
   screens[name].classList.add("active");
   currentScreen = name;
+  keys.clear();
+  if (["game", "upgrades", "credits", "story"].includes(name)) saveProgress();
 }
 
 function startGame() {
+  if (activeSaveSlot !== null) saveSession.introComplete = true;
   enterArea("pristineCastle");
   showScreen("game");
   if (!animationFrameId) animationFrameId = requestAnimationFrame(gameLoop);
@@ -97,6 +100,7 @@ function updateHud() {
 
 function startBattle(enemy) {
   if (bossDefeated(enemy) || battleBusy) return;
+  saveProgress();
   clearAttackTiming();
   clearSkillChecks();
   window.clearTimeout(battleTimer);
@@ -426,6 +430,7 @@ function finishRestoration() {
   const reward = restoredEnemy.kind !== "boss" && restoredEnemy.visual === "flying" ? 10 : config.restoreReward;
   playerState.divinePoints += reward;
   const { area, remainingEnemies, areaCleared } = restoreMapEnemy(activeEnemy, currentAreaId);
+  saveProgress(true);
   document.querySelector("#battle-enemy").classList.add("restored");
   document.querySelector("#battle-message").textContent = `RESTORED! You earned ${reward} Divine Points.`;
   updateHud();
@@ -492,6 +497,7 @@ function buyUpgrade(type) {
   if (type === "healOverTime") { playerState.healOverTime = true; document.querySelector("#upgrade-message").textContent = "Heal Over Time learned. Health rises by 3."; }
   if (type === "dodge") { playerState.defense += 3; document.querySelector("#upgrade-message").textContent = "Dodge learned: Defense rises by 3; 7% chance to avoid attacks."; }
   updateUpgradeButtons();
+  saveProgress();
 }
 function initializeDivineTree() {
   const tree = document.querySelector(".divine-tree");
@@ -605,7 +611,7 @@ function gameLoop(time) {
   const delta = time - lastTime;
   lastTime = time;
 
-  if (currentScreen === "game" && delta < 80) {
+  if (currentScreen === "game" && delta < 80 && !document.querySelector('#save-confirm').open) {
     movePlayer();
     moveEnemies();
     updateCamera();
@@ -622,9 +628,7 @@ function gameLoop(time) {
 }
 
 document.querySelector("#play-button").addEventListener("click", () => {
-  storyIndex = 0;
-  renderStory();
-  showScreen("story");
+  openSaveMenu();
 });
 
 document.querySelector("#story-prev").addEventListener("click", () => {
@@ -638,8 +642,11 @@ document.querySelector("#upgrade-button").addEventListener("click", () => {
   showScreen("upgrades");
 });
 document.querySelector("#close-upgrades").addEventListener("click", () => showScreen("game"));
-document.querySelector("#reset-button").addEventListener("click", resetGame);
-document.querySelector("#credits-return").addEventListener("click", () => { resetGame(); showScreen("title"); });
+document.querySelector("#reset-button").addEventListener("click", confirmRestartSave);
+document.querySelector("#save-menu-button").addEventListener("click", openSaveMenu);
+document.querySelector("#credits-return").addEventListener("click", () => {
+  saveProgress(); activeSaveSlot = null; resetGame(); showScreen("title");
+});
 document.querySelector("#attack-action").addEventListener("click", attackAction);
 document.querySelector("#light-spell-action").addEventListener("click", lightSpellAction);
 document.querySelector("#soul-spell-action").addEventListener("click", soulSpellAction);
@@ -656,6 +663,7 @@ document.querySelectorAll("[data-upgrade]").forEach((button) => {
 });
 
 window.addEventListener("keydown", (event) => {
+  if (document.querySelector('#save-confirm').open || currentScreen === 'saves') return;
   const key = event.key.toLowerCase();
   if (["arrowleft", "arrowright", "arrowup", "arrowdown", "a", "s", "d", "w", " "].includes(key)) {
     event.preventDefault();
@@ -716,3 +724,4 @@ updateHud();
 updateBattleActions();
 renderStory();
 drawWorld();
+initializeSaveSystem();

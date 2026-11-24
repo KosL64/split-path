@@ -6,6 +6,7 @@ const http = require('node:http');
 const { execFileSync } = require('node:child_process');
 const { pathToFileURL } = require('node:url');
 const verifyBranchIntegration = require('./integration-checks.cjs');
+const verifySaveSystem = require('./save-checks.cjs');
 
 let playwright;
 try { playwright = require('playwright'); }
@@ -492,6 +493,7 @@ async function verifyTitleAndStory(page, label) {
   assert.ok(art.x + art.width <= panel.x || art.y + art.height <= panel.y, `${label}: cover and Play panel do not overlap`);
   await page.screenshot({ path: path.join(os.tmpdir(), `split-path-title-${label}.png`) });
   await page.locator('#play-button').click();
+  await page.locator('[data-slot="0"]').click();
   const expected = [
     'Once upon a time, the Pristine King ruled over the Pristine Kingdom.',
     'But one day, a shadow appeared, killed the king, and took his place.',
@@ -1154,6 +1156,14 @@ async function verifyAzureMountainUpdate(page, label) {
     browser = await playwright.chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || 'msedge' });
     const origin = `http://127.0.0.1:${server.address().port}`;
     const desktop = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    if (process.argv.includes('--saves-only')) {
+      await desktop.goto(origin + '/index.html');
+      await verifySaveSystem(desktop, 'desktop');
+      const mobile = await browser.newPage({ viewport: { width: 390, height: 844 } });
+      await mobile.goto(pathToFileURL(path.join(root, 'index.html')).href);
+      await verifySaveSystem(mobile, 'mobile-local');
+      return;
+    }
     if (process.argv.includes('--integration-only')) {
       await desktop.addInitScript(() => { Math.random = () => 0.5; });
       await desktop.goto(origin + '/index.html');

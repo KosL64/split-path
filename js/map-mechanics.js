@@ -1277,6 +1277,7 @@ function interactWithCastle(feature) {
     const swungWhileMoving = keys.has("arrowleft") || keys.has("a") || keys.has("arrowright") || keys.has("d") || keys.has("arrowdown") || keys.has("s");
     castleState.exitCleared = true;
     if (waitedOnThrone) {
+      awardSaveSticker("patience");
       playerState.maxHealth += 1;
       playerState.health = Math.min(playerState.maxHealth, playerState.health + 1);
       updateHud();
@@ -1322,6 +1323,7 @@ function showTemporaryPrompt(message, duration = 3000) {
   dialogueUntil = performance.now() + duration;
   setPrompt(message);
   dialogueTimer = window.setTimeout(clearTemporaryMessage, duration);
+  saveProgress();
 }
 
 function clearTemporaryMessage() {

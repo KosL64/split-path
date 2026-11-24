@@ -2,6 +2,7 @@
 
 const screens = {
   title: document.querySelector("#title-screen"),
+  saves: document.querySelector("#save-screen"),
   story: document.querySelector("#story-screen"),
   game: document.querySelector("#game-screen"),
   battle: document.querySelector("#battle-screen"),

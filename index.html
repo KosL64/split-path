@@ -17,6 +17,21 @@
       </div>
     </section>
 
+    <section id="save-screen" class="screen" aria-labelledby="save-heading">
+      <div class="save-shell">
+        <p class="eyebrow">Choose your path</p><h1 id="save-heading">Your journeys</h1>
+        <p>Choose a save to continue, or start a new journey in an empty slot.</p>
+        <div id="save-slots"></div>
+        <p id="save-storage-note">Progress is saved in this browser on this computer.</p>
+        <button id="save-back">Back to title</button>
+      </div>
+    </section>
+    <dialog id="save-confirm" aria-labelledby="save-confirm-heading">
+      <h2 id="save-confirm-heading">Delete this save?</h2><p id="save-confirm-copy"></p>
+      <div class="save-confirm-actions"><button id="save-confirm-no" autofocus>No, keep it</button><button id="save-confirm-yes" class="danger-button">Yes, delete</button></div>
+    </dialog>
+    <p id="save-status" role="status" aria-live="polite"></p>
+
     <section id="story-screen" class="screen" aria-label="Story introduction">
       <div class="story-shell">
         <article id="story-slide" class="story-slide"></article>
@@ -37,7 +52,8 @@
         </div>
         <div class="hud-group">
           <button id="upgrade-button">Divine Path</button>
-          <button id="reset-button">Reset</button>
+          <button id="save-menu-button">Save &amp; Quit</button>
+          <button id="reset-button">Restart Save</button>
         </div>
       </div>
 
@@ -219,6 +235,7 @@
   <script src="js/map-landmarks.js"></script>
   <script src="js/map-overworld.js"></script>
   <script src="js/battle-skillchecks.js"></script>
+  <script src="js/save-system.js"></script>
   <script src="js/game.js"></script>
 </body>
 </html>
