@@ -299,7 +299,6 @@ function starfallAction() {
   magicMenuOpen = false;
   updateBattleActions();
   const stunTurns = playerState.soulSpellStunBonus ? 2 : 1;
-  enemyStunTurns = stunTurns;
   performPlayerAttack({ name: "Starfall Vengence", verb: "Starfall Vengence",
     fixedDamage: playerState.lightSpellBonus ? 55 : 50, stunTurns, areaAttack: true });
 }
@@ -329,10 +328,10 @@ function performPlayerAttack(action) {
   const hitCount = doubleStrike ? 2 : 1;
   const power = oneStrike * hitCount;
   document.querySelector("#battle-message").textContent = "Your attack is ready.";
-  if (action.stunTurns) document.querySelector("#battle-message").textContent += ` Stunned for ${action.stunTurns} turns.`;
   updateBattleStats();
   const startedAt = performance.now();
-  pendingAttack = { enemy: activeEnemy, power, extraHeal: action.extraHeal, hitCount, critical, doubleStrike, verb: action.verb, startedAt, deadline: startedAt + attackTimingDuration };
+  pendingAttack = { enemy: activeEnemy, power, extraHeal: action.extraHeal, hitCount, critical, doubleStrike, verb: action.verb,
+    stunTurns: action.stunTurns || 0, startedAt, deadline: startedAt + attackTimingDuration };
   const timing = document.querySelector("#attack-timing"); timing.classList.remove("timing-open"); void timing.offsetWidth; timing.classList.add("timing-open");
   document.querySelector("#attack-boost").disabled = false; attackTimingTimer = window.setTimeout(resolvePlayerAttack, attackTimingDuration);
 }
@@ -354,13 +353,15 @@ function clearAttackTiming() {
 
 function resolvePlayerAttack(bonus = 0) {
   if (!pendingAttack) return;
-  const { enemy, power: basePower, extraHeal, hitCount, critical, doubleStrike, verb } = pendingAttack;
+  const { enemy, power: basePower, extraHeal, hitCount, critical, doubleStrike, verb, stunTurns } = pendingAttack;
   clearAttackTiming();
   if (currentScreen !== "battle" || enemy !== activeEnemy || enemy.restored) return;
   const power = Math.round(basePower * (1 + bonus));
+  const stunned = stunTurns > 0 && bonus === 0.25;
+  if (stunned) enemyStunTurns = stunTurns;
   enemy.control = Math.max(0, enemy.control - power);
   const timingText = bonus === 0.25 ? "Perfect! +25%. " : bonus === 0.2 ? "Center hit! +20%. " : "";
-  document.querySelector("#battle-message").textContent = `${timingText}${critical ? "Critical hit! " : ""}${verb} reduces Control by ${power}.${doubleStrike ? " Double attack!" : ""}`;
+  document.querySelector("#battle-message").textContent = `${timingText}${critical ? "Critical hit! " : ""}${verb} reduces Control by ${power}.${stunned ? ` Enemy stunned for ${stunTurns} turn${stunTurns === 1 ? "" : "s"}.` : ""}${doubleStrike ? " Double attack!" : ""}`;
   const lifeStealHeal = playerState.lifeSteal ? Math.max(1, Math.round(power / 2)) : 0;
   const finishAttack = (bonus) => completePlayerAttack(enemy, lifeStealHeal + Math.ceil(lifeStealHeal * bonus) + extraHeal, hitCount);
   if (playerState.lifeSteal) startSkillChecks('lifeSteal', skillCheckSettings.lifeStealCount, finishAttack);
