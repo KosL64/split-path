@@ -32,7 +32,7 @@ function validSave(data) {
     || !areas[data.areaId] || typeof data.introComplete !== 'boolean' || typeof data.completed !== 'boolean'
     || !Number.isFinite(data.createdAt) || !Number.isFinite(data.updatedAt)
     || Object.keys(data.world).length !== Object.keys(areas).length || Object.keys(data.world).some(id => !areas[id])
-    || !Array.isArray(data.stickers) || data.stickers.some(id => !['patience', 'night-plains', 'rare-kyle', 'kyle-defeated'].includes(id))
+    || !Array.isArray(data.stickers) || data.stickers.some(id => !['patience', 'night-plains', 'rare-kyle', 'full-restoration', 'kyle-defeated'].includes(id))
     || !Number.isInteger(data.storyIndex) || data.storyIndex < 0 || data.storyIndex >= storySlides.length) return false;
   const primitive = value => ['string', 'boolean'].includes(typeof value) || (Number.isFinite(value) && Math.abs(value) <= 10000000);
   for (const [key, value] of Object.entries(playerState)) {
@@ -148,7 +148,7 @@ function renderSaveSlots() {
       summary.textContent = `${data.completed ? 'Journey complete' : !data.introComplete ? 'New journey' : areas[data.areaId].name} · ${restored}/106 restored`;
       const date = document.createElement('span'); date.textContent = `Saved ${new Date(data.updatedAt).toLocaleString()}`;
       open.append(heading, summary, date);
-      const stickerNames = { patience: 'Patience', 'night-plains': 'Night Plains', 'rare-kyle': 'Rare Kyle', 'kyle-defeated': 'Kyle Defeated' };
+      const stickerNames = { patience: 'Waiting Game', 'night-plains': 'Pink at Night', 'rare-kyle': 'Too early Kyle!', 'full-restoration': 'Full Restoration', 'kyle-defeated': 'Recrowned' };
       data.stickers.forEach((id, stickerIndex) => {
         const sticker = document.createElement('span');
         sticker.className = `save-sticker ${stickerIndex % 2 ? 'sticker-magenta' : 'sticker-blue'}`;
@@ -181,6 +181,7 @@ function selectSaveSlot(index) {
   else { storyIndex = 0; saveSession = { createdAt: Date.now(), stickers: new Set(), introComplete: false }; }
   activeSaveSlot = index;
   loadingSave = false;
+  checkFullRestorationSticker();
   renderStory(); updateBattleActions(); updateUpgradeButtons(); updateCamera(); drawWorld();
   if (slot.data?.completed) {
     document.querySelector('#credits-message').textContent = restoredEnemyAreas.size === 2 ? 'I think you missed a spot!' : 'Thank you for playing Split Path.';

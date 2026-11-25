@@ -445,6 +445,7 @@ function finishRestoration() {
   const reward = restoredEnemy.kind !== "boss" && restoredEnemy.visual === "flying" ? 10 : config.restoreReward;
   playerState.divinePoints += reward;
   const { area, remainingEnemies, areaCleared } = restoreMapEnemy(activeEnemy, currentAreaId);
+  checkFullRestorationSticker();
   saveProgress(true);
   document.querySelector("#battle-enemy").classList.add("restored");
   document.querySelector("#battle-message").textContent = `RESTORED! You earned ${reward} Divine Points.`;
@@ -477,6 +478,16 @@ function finishRestoration() {
         : `${area.name}: all ordinary enemies are restored. Its guardian has appeared.`
       : `${area.name}: ${remainingEnemies} controlled creatures remain.`;
   }, 900);
+}
+
+function checkFullRestorationSticker() {
+  const restoredCount = Object.values(areas).flatMap(area => area.enemies).filter(enemy =>
+    enemy.restored && !enemy.permanentResident
+      && ['sylvan', 'azureApex', 'controlledPlains'].includes(enemy.originArea)
+      && enemy.kind !== 'boss').length;
+  if (restoredCount >= 106 && Object.values(regionalBossStates).every(boss => boss.defeated)) {
+    awardSaveSticker('full-restoration');
+  }
 }
 
 function buyUpgrade(type) {
