@@ -32,7 +32,7 @@ function validSave(data) {
     || !areas[data.areaId] || typeof data.introComplete !== 'boolean' || typeof data.completed !== 'boolean'
     || !Number.isFinite(data.createdAt) || !Number.isFinite(data.updatedAt)
     || Object.keys(data.world).length !== Object.keys(areas).length || Object.keys(data.world).some(id => !areas[id])
-    || !Array.isArray(data.stickers) || data.stickers.some(id => !['patience', 'night-plains', 'rare-kyle', 'full-restoration', 'kyle-defeated'].includes(id))
+    || !Array.isArray(data.stickers) || data.stickers.some(id => typeof id !== 'string' || id.length > 48 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id))
     || !Number.isInteger(data.storyIndex) || data.storyIndex < 0 || data.storyIndex >= storySlides.length) return false;
   const primitive = value => ['string', 'boolean'].includes(typeof value) || (Number.isFinite(value) && Math.abs(value) <= 10000000);
   for (const [key, value] of Object.entries(playerState)) {
@@ -149,10 +149,19 @@ function renderSaveSlots() {
       const date = document.createElement('span'); date.textContent = `Saved ${new Date(data.updatedAt).toLocaleString()}`;
       open.append(heading, summary, date);
       const stickerNames = { patience: 'Waiting Game', 'night-plains': 'Pink at Night', 'rare-kyle': 'Too early Kyle!', 'full-restoration': 'Full Restoration', 'kyle-defeated': 'Recrowned' };
+      const stickerSprites = {
+        patience: 'img/assets/stickers/waiting-game.png',
+        'night-plains': 'img/assets/stickers/pink-at-night.png',
+        'rare-kyle': 'img/assets/stickers/too-early-kyle.png',
+        'full-restoration': 'img/assets/stickers/full-restoration.png',
+        'kyle-defeated': 'img/assets/stickers/recrowned.png'
+      };
       data.stickers.forEach((id, stickerIndex) => {
         const sticker = document.createElement('span');
-        sticker.className = `save-sticker ${stickerIndex % 2 ? 'sticker-magenta' : 'sticker-blue'}`;
-        sticker.style.left = `${24 + stickerIndex * 24}px`;
+        const sprite = stickerSprites[id];
+        sticker.className = `save-sticker ${sprite ? 'sticker-sprite' : stickerIndex % 2 ? 'sticker-magenta' : 'sticker-blue'}`;
+        sticker.style.left = `${24 + stickerIndex * 52 + (sprite ? 0 : 14)}px`;
+        if (sprite) sticker.style.backgroundImage = `url("${sprite}")`;
         sticker.title = stickerNames[id] || 'Sticker'; sticker.setAttribute('role', 'img');
         sticker.setAttribute('aria-label', `${stickerNames[id] || 'Game'} sticker`); card.append(sticker);
       });
