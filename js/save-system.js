@@ -181,6 +181,7 @@ function selectSaveSlot(index) {
   else { storyIndex = 0; saveSession = { createdAt: Date.now(), stickers: new Set(), introComplete: false }; }
   activeSaveSlot = index;
   loadingSave = false;
+  awardNightPlainsStickerIfEligible();
   checkFullRestorationSticker();
   renderStory(); updateBattleActions(); updateUpgradeButtons(); updateCamera(); drawWorld();
   if (slot.data?.completed) {
