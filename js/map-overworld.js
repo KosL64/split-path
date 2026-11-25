@@ -119,6 +119,7 @@ function moveOverworldPlayer(next) {
     finishAreaDeparture();
     currentAreaId = targetId;
     markSpecialVillageEntry(targetId);
+    awardNightPlainsStickerIfEligible();
     clearInteractionState();
     contactLockedUntil = performance.now() + config.contactCooldown;
   }
