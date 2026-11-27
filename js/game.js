@@ -422,13 +422,13 @@ function clearAttackTiming() {
 
 function resolvePlayerAttack(bonus = 0) {
   if (!pendingAttack) return;
-  const { enemy, power: basePower, extraHeal, hitCount, critical, canDouble, verb, stunTurns } = pendingAttack;
+  const { enemy, power: basePower, extraHeal, hitCount, critical, doubleStrike: pendingDoubleStrike, canDouble, verb, stunTurns } = pendingAttack;
   clearAttackTiming();
   if (currentScreen !== "battle" || enemy !== activeEnemy || enemy.restored) return;
   const flurry = playerState.upgrades.flurry && bonus === 0.25;
   const doubleStrike = canDouble && playerState.upgrades.flurry && playerState.doubleAttack
     ? Math.random() < (flurry ? 0.075 : 0.15)
-    : pendingAttack.doubleStrike;
+    : pendingDoubleStrike;
   let power = Math.round(basePower * (1 + bonus));
   let effectiveHitCount = hitCount;
   if (flurry) {
