@@ -89,7 +89,7 @@ let battleTimer = null;
 let attackTimingTimer = null;
 let pendingAttack = null;
 // Temporary classroom test shortcut; remove with the dagger/H activation flow.
-const daggerTestMode = { inspections: 0, enabled: false };
+const daggerTestMode = { inspections: 0, enabled: false, starfallUnlocked: false };
 let restorationTimer = null;
 const attackTimingDuration = 500;
 let soulSpellUsed = false;

@@ -11,7 +11,7 @@ function drawWorld() {
   }
   drawWorldAtmosphere();
   if (exterior) drawMapLabel(landscapeLocationName(), areas[currentAreaId].world.parent ? "Village"
-    : currentAreaId === "castleGrounds" ? "Pristine Bridge | Pristine River" : "");
+    : currentAreaId === "castleGrounds" ? "Pristine Bridge | Pristine River | Pristine Castle" : "");
   else drawAreaLabel(currentAreaId);
 }
 

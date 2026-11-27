@@ -165,7 +165,7 @@ function updateBattleActions() {
   const hasStrengthen = playerState.upgrades.strengthen > 0;
   document.querySelector("#attack-action").textContent = playerState.magic ? "Magic" : "Attack";
   document.querySelector("#attack-action").setAttribute("aria-expanded", String(playerState.magic && magicMenuOpen));
-  const starfallUnlocked = daggerTestMode.enabled && playerState.magic;
+  const starfallUnlocked = daggerTestMode.starfallUnlocked && playerState.magic;
   document.querySelector("#light-spell-action").classList.toggle("hidden", !playerState.magic || !magicMenuOpen || starfallUnlocked);
   document.querySelector("#soul-spell-action").classList.toggle("hidden", !playerState.magic || !magicMenuOpen || starfallUnlocked);
   document.querySelector("#starfall-action").classList.toggle("hidden", !starfallUnlocked || !magicMenuOpen);
@@ -295,7 +295,7 @@ function lightSpellAction() {
 }
 
 function starfallAction() {
-  if (battleBusy || !activeEnemy || !playerState.magic || !playerState.hasStaff || !daggerTestMode.enabled) return;
+  if (battleBusy || !activeEnemy || !playerState.magic || !playerState.hasStaff || !daggerTestMode.starfallUnlocked) return;
   magicMenuOpen = false;
   updateBattleActions();
   const stunTurns = playerState.soulSpellStunBonus ? 2 : 1;
@@ -589,6 +589,7 @@ function resetGame() {
   clearSkillChecks();
   daggerTestMode.inspections = 0;
   daggerTestMode.enabled = false;
+  daggerTestMode.starfallUnlocked = false;
   window.clearTimeout(restorationTimer);
   restorationTimer = null;
   clearAttackTiming();
@@ -720,9 +721,13 @@ window.addEventListener("keydown", (event) => {
     return;
   }
 
-  if (key === "=" && !event.repeat && currentScreen === "game" && gameMode === "area"
-    && currentAreaId === "pristineCastle" && daggerTestMode.inspections >= 3 && !daggerTestMode.enabled) {
+  const daggerCodeReady = !event.repeat && currentScreen === "game" && gameMode === "area"
+    && currentAreaId === "pristineCastle" && daggerTestMode.inspections >= 3;
+  if (key === "h" && daggerCodeReady && !daggerTestMode.enabled) {
     daggerTestMode.enabled = true;
+  }
+  if (key === "=" && daggerCodeReady && !daggerTestMode.starfallUnlocked) {
+    daggerTestMode.starfallUnlocked = true;
   }
   if ((key === "z" || key === "enter") && !event.repeat) usePrompt();
   if (key === "u" && currentScreen === "game") {

@@ -17,7 +17,7 @@ function initializeOverworld() {
   grounds[13][73] = "d";
   setTiles(grounds, [[12, 8], [29, 11], [48, 6], [107, 8], [128, 12], [144, 6]], "T");
   areas.castleGrounds = {
-    name: "Pristine Castle Grounds", width: 160, height: 31, start: { x: 73, y: 14 },
+    name: "Pristine Cliffs", width: 160, height: 31, start: { x: 73, y: 14 },
     cameraX: 0, cameraY: 0, healed: true, enemies: [], map: finishAreaGrid(grounds),
     world: { x: 0, y: 0 }, layer: 1,
     portals: [{ x: 73, y: 13, target: "pristineCastle", label: "Pristine Castle" }],
