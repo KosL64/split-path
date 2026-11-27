@@ -18,7 +18,16 @@ const upgradeDefinitions = {
   higherHealth: { cost: 15, requires: "greaterHealth", path: "health", tier: 3, choiceGroup: "greaterHealthTier3", choiceLimit: 2 },
   strengthen: { cost: 15, requires: "greaterHealth", path: "health", tier: 3, choiceGroup: "greaterHealthTier3", choiceLimit: 2 },
   healOverTime: { cost: 15, requires: "greaterHealth", path: "health", tier: 3, choiceGroup: "greaterHealthTier3", choiceLimit: 2 },
-  dodge: { cost: 15, requiresAny: ["greaterDefense", "thorns"], path: "defense", tier: 3 }
+  dodge: { cost: 15, requiresAny: ["greaterDefense", "thorns"], path: "defense", tier: 3 },
+  flurry: { cost: 15, requiresAll: ["lightSpell2", "doubleAttack", "critRate"], path: "damage", tier: 4, attackBonus: 5 },
+  soulSpell3: { cost: 15, requires: "soulSpell2", path: "damage", tier: 4, attackBonus: 5 },
+  soulBomb: { cost: 15, requires: "soulSpell3", path: "damage", tier: 4, attackBonus: 5 },
+  poison: { cost: 15, requires: "wither", path: "health", tier: 4, healthBonus: 10 },
+  venom: { cost: 15, requires: "wither", path: "health", tier: 4, healthBonus: 10 },
+  strengthen2: { cost: 15, requires: "strengthen", path: "health", tier: 4, healthBonus: 10 },
+  healOverTime2: { cost: 15, requires: "healOverTime", path: "health", tier: 4, healthBonus: 10 },
+  defendPlus: { cost: 15, requires: "greaterDefense", path: "defense", tier: 4, defenseBonus: 7 },
+  reflect: { cost: 15, requires: "thorns", path: "defense", tier: 5, defenseBonus: 8 }
 };
 
 const storySlides = [
@@ -105,7 +114,13 @@ function startBattle(enemy) {
   clearSkillChecks();
   window.clearTimeout(battleTimer);
   soulSpellUsed = false;
+  soulSpellUsesThisBattle = 0;
   enemyStunTurns = 0;
+  enemy.poisonStacks = [];
+  defendPlusTriggered = false;
+  defendPlusBlockNext = false;
+  extraLifeActive = false;
+  lastPlayerAction = null;
   battleAttackBoost = 0;
   battleDefenseBoost = 0;
   witherAttackCount = 0;
@@ -176,9 +191,11 @@ function updateBattleActions() {
   document.querySelector("#light-spell-action").disabled = battleBusy || !playerState.hasStaff || !playerState.magic;
   document.querySelector("#starfall-action").disabled = battleBusy || !playerState.hasStaff || !starfallUnlocked;
   const soulButton = document.querySelector("#soul-spell-action");
-  soulButton.disabled = battleBusy || !playerState.hasStaff || !playerState.magic || soulSpellUsed;
-  soulButton.classList.toggle("spell-used", soulSpellUsed);
-  soulButton.setAttribute("aria-label", soulSpellUsed ? "Soul Spell, already used this battle" : "Soul Spell");
+  const soulUsesLeft = Math.max(0, (playerState.upgrades.soulSpell3 ? 2 : 1) - soulSpellUsesThisBattle);
+  soulButton.disabled = battleBusy || !playerState.hasStaff || !playerState.magic || soulUsesLeft === 0;
+  soulButton.classList.toggle("spell-used", soulUsesLeft === 0);
+  soulButton.setAttribute("aria-label", soulUsesLeft === 0 ? "Soul Spell, no uses left this battle"
+    : `Soul Spell, ${soulUsesLeft} use${soulUsesLeft === 1 ? "" : "s"} left`);
   ["#heal-action", "#heal-now-action", "#strengthen-attack-action", "#strengthen-defense-action"].forEach((id) => { document.querySelector(id).disabled = battleBusy; });
 }
 function playBattleEffect(name) {
@@ -190,17 +207,23 @@ function playBattleEffect(name) {
 
 function enemyTurn() {
   if (currentScreen !== "battle" || !activeEnemy || activeEnemy.restored) return;
+  const finishTurn = () => {
+    battleDefending = false;
+    tickPoison();
+    updateBattleStats();
+    if (activeEnemy?.control === 0) { finishRestoration(); return; }
+    setBattleButtons(false);
+  };
   if (enemyStunTurns > 0) {
     enemyStunTurns -= 1;
-    battleDefending = false;
     document.querySelector("#battle-message").textContent += " The enemy is stunned and cannot attack.";
-    setBattleButtons(false);
+    finishTurn();
     return;
   }
+  if (playerState.upgrades.venom && Math.random() < 0.05) applyPoison(activeEnemy, "Venom");
   if (playerState.upgrades.dodge && Math.random() < 0.07) {
-    battleDefending = false;
     document.querySelector("#battle-message").textContent += " You dodge the enemy attack!";
-    setBattleButtons(false);
+    finishTurn();
     return;
   }
   const critical = rollCriticalHit();
@@ -208,35 +231,79 @@ function enemyTurn() {
   const baseDamage = Math.max(1, activeEnemy.attack - effectiveDefense);
   const guardedCritical = critical && !(battleDefending && playerState.strongDefend);
   const incomingDamage = guardedCritical ? baseDamage * 2 : baseDamage;
-  const damage = battleDefending && !guardedCritical ? Math.max(1, Math.round(incomingDamage / 2)) : incomingDamage;
+  let damage = battleDefending && !guardedCritical ? Math.max(1, Math.round(incomingDamage / 2)) : incomingDamage;
+  let reflectedDamage = 0;
+  if (battleDefending && playerState.upgrades.reflect && Math.random() < 0.20) {
+    damage = 0;
+    reflectedDamage = Math.max(1, Math.round(incomingDamage * 0.40));
+  }
+  if (battleDefending && defendPlusBlockNext) {
+    damage = 0;
+    defendPlusBlockNext = false;
+  }
   const thornsDamage = playerState.thorns ? Math.max(1, Math.round(activeEnemy.attack / 4)) : 0;
   battleDefending = false;
   playerState.health = Math.max(0, playerState.health - damage);
-  if (thornsDamage && activeEnemy) {
-    activeEnemy.control = Math.max(0, activeEnemy.control - thornsDamage);
+  const totalReflected = thornsDamage + reflectedDamage;
+  if (totalReflected && activeEnemy) {
+    activeEnemy.control = Math.max(0, activeEnemy.control - totalReflected);
   }
   updateBattleStats();
 
   if (activeEnemy?.control === 0) {
-    document.querySelector("#battle-message").textContent += ` Thorns reflect ${thornsDamage} control damage.`;
+    document.querySelector("#battle-message").textContent += ` Your defenses reflect ${totalReflected} Control damage.`;
     finishRestoration();
     return;
   }
 
   if (playerState.health === 0) {
-    showLoseScreen();
-    return;
+    if (extraLifeActive) {
+      extraLifeActive = false;
+      playerState.health = playerState.maxHealth;
+      if (playerState.upgrades.venom) applyPoison(activeEnemy, "Extra Life venom");
+      document.querySelector("#battle-message").textContent += " Extra Life brings you back at full health!";
+    } else {
+      tickPoison();
+      if (activeEnemy?.control === 0) finishRestoration(); else showLoseScreen();
+      return;
+    }
   }
 
   const criticalText = critical && playerState.strongDefend && damage === baseDamage
     ? " Your stronger guard cancels the critical hit."
     : "";
-  const thornsText = thornsDamage ? ` Thorns reflect ${thornsDamage} control damage.` : "";
+  const thornsText = totalReflected ? ` Your defenses reflect ${totalReflected} Control damage.` : "";
   document.querySelector("#battle-message").textContent += guardedCritical
     ? ` Critical hit! The cube strikes back for ${damage} damage.`
     : ` The cube strikes back for ${damage} damage.`;
   document.querySelector("#battle-message").textContent += criticalText + thornsText;
+  tickPoison();
+  if (activeEnemy?.control === 0) { finishRestoration(); return; }
   setBattleButtons(false);
+}
+
+function applyPoison(enemy, source) {
+  if (!enemy || enemy.restored || enemy.control <= 0) return;
+  if (!Array.isArray(enemy.poisonStacks)) enemy.poisonStacks = [];
+  const initialControl = enemy.control;
+  enemy.poisonStacks.push({ initialControl, dealt: 0, cap: Math.floor(initialControl * 2 / 3) });
+  document.querySelector("#battle-message").textContent += ` ${source} poisons the enemy.`;
+}
+
+function tickPoison() {
+  if (!playerState.upgrades.poison || !activeEnemy?.poisonStacks?.length || activeEnemy.restored) return;
+  let damageTotal = 0;
+  activeEnemy.poisonStacks = activeEnemy.poisonStacks.filter((stack) => {
+    const remaining = Math.max(0, stack.cap - stack.dealt);
+    const damage = Math.min(remaining, Math.max(1, Math.floor(stack.initialControl * 0.10)), activeEnemy.control);
+    if (damage > 0) {
+      activeEnemy.control -= damage;
+      stack.dealt += damage;
+      damageTotal += damage;
+    }
+    return stack.dealt < stack.cap && activeEnemy.control > 0;
+  });
+  if (damageTotal) document.querySelector("#battle-message").textContent += ` Poison deals ${damageTotal} Control damage.`;
 }
 
 function queueEnemyTurn() {
@@ -304,8 +371,10 @@ function starfallAction() {
 }
 
 function soulSpellAction() {
-  if (battleBusy || !activeEnemy || soulSpellUsed || !playerState.magic || !playerState.hasStaff) return;
-  soulSpellUsed = true;
+  const maxUses = playerState.upgrades.soulSpell3 ? 2 : 1;
+  if (battleBusy || !activeEnemy || soulSpellUsesThisBattle >= maxUses || !playerState.magic || !playerState.hasStaff) return;
+  soulSpellUsesThisBattle += 1;
+  soulSpellUsed = soulSpellUsesThisBattle >= maxUses;
   enemyStunTurns = 2 + playerState.soulSpellStunBonus;
   magicMenuOpen = false;
   updateBattleActions();
@@ -324,13 +393,13 @@ function performPlayerAttack(action) {
   const baseAttack = action.fixedDamage ?? Math.round(action.attackPower * (1 + battleAttackBoost));
   const critical = action.fixedDamage === undefined && rollCriticalHit();
   const oneStrike = action.fixedDamage === undefined ? damageAfterEnemyDefense(critical ? baseAttack * 2 : baseAttack, activeEnemy.defense) : action.fixedDamage;
-  const doubleStrike = action.canDouble && playerState.doubleAttack && Math.random() < 0.15;
+  const doubleStrike = action.canDouble && playerState.doubleAttack && !playerState.upgrades.flurry && Math.random() < 0.15;
   const hitCount = doubleStrike ? 2 : 1;
   const power = oneStrike * hitCount;
   document.querySelector("#battle-message").textContent = "Your attack is ready.";
   updateBattleStats();
   const startedAt = performance.now();
-  pendingAttack = { enemy: activeEnemy, power, extraHeal: action.extraHeal, hitCount, critical, doubleStrike, verb: action.verb,
+  pendingAttack = { enemy: activeEnemy, power, extraHeal: action.extraHeal, hitCount, doubleStrike, canDouble: !!action.canDouble, verb: action.verb,
     stunTurns: action.stunTurns || 0, startedAt, deadline: startedAt + attackTimingDuration };
   const timing = document.querySelector("#attack-timing"); timing.classList.remove("timing-open"); void timing.offsetWidth; timing.classList.add("timing-open");
   document.querySelector("#attack-boost").disabled = false; attackTimingTimer = window.setTimeout(resolvePlayerAttack, attackTimingDuration);
@@ -353,31 +422,45 @@ function clearAttackTiming() {
 
 function resolvePlayerAttack(bonus = 0) {
   if (!pendingAttack) return;
-  const { enemy, power: basePower, extraHeal, hitCount, critical, doubleStrike, verb, stunTurns } = pendingAttack;
+  const { enemy, power: basePower, extraHeal, hitCount, critical, canDouble, verb, stunTurns } = pendingAttack;
   clearAttackTiming();
   if (currentScreen !== "battle" || enemy !== activeEnemy || enemy.restored) return;
-  const power = Math.round(basePower * (1 + bonus));
+  const flurry = playerState.upgrades.flurry && bonus === 0.25;
+  const doubleStrike = canDouble && playerState.upgrades.flurry && playerState.doubleAttack
+    ? Math.random() < (flurry ? 0.075 : 0.15)
+    : pendingAttack.doubleStrike;
+  let power = Math.round(basePower * (1 + bonus));
+  let effectiveHitCount = hitCount;
+  if (flurry) {
+    const lightSpellHit = damageAfterEnemyDefense(currentAttackPower() + 2 + playerState.lightSpellBonus, enemy.defense);
+    power = Math.max(1, lightSpellHit - 3) * 4 * (doubleStrike ? 6 : 4);
+    effectiveHitCount = doubleStrike ? 6 : 4;
+  }
   const stunned = stunTurns > 0 && bonus === 0.25;
   if (stunned) enemyStunTurns = stunTurns;
   enemy.control = Math.max(0, enemy.control - power);
   const timingText = bonus === 0.25 ? "Perfect! +25%. " : bonus === 0.2 ? "Center hit! +20%. " : "";
-  document.querySelector("#battle-message").textContent = `${timingText}${critical ? "Critical hit! " : ""}${verb} reduces Control by ${power}.${stunned ? ` Enemy stunned for ${stunTurns} turn${stunTurns === 1 ? "" : "s"}.` : ""}${doubleStrike ? " Double attack!" : ""}`;
+  document.querySelector("#battle-message").textContent = `${timingText}${critical ? "Critical hit! " : ""}${flurry ? "Flurry" : verb} reduces Control by ${power}.${stunned ? ` Enemy stunned for ${stunTurns} turn${stunTurns === 1 ? "" : "s"}.` : ""}${doubleStrike ? " Double attack!" : ""}`;
+  if (playerState.upgrades.poison && playerState.lifeSteal) {
+    for (let hit = 0; hit < effectiveHitCount; hit += 1) if (Math.random() < 0.05) applyPoison(enemy, "Life Steal");
+  }
   const lifeStealHeal = playerState.lifeSteal ? Math.max(1, Math.round(power / 2)) : 0;
-  const finishAttack = (bonus) => completePlayerAttack(enemy, lifeStealHeal + Math.ceil(lifeStealHeal * bonus) + extraHeal, hitCount);
+  const finishAttack = (bonus) => completePlayerAttack(enemy, lifeStealHeal + Math.ceil(lifeStealHeal * bonus) + extraHeal, effectiveHitCount);
   if (playerState.lifeSteal) startSkillChecks('lifeSteal', skillCheckSettings.lifeStealCount, finishAttack);
   else finishAttack(0);
 }
 
 function completePlayerAttack(enemy, totalHeal, hitCount) {
   if (currentScreen !== 'battle' || activeEnemy !== enemy || enemy.restored) return;
+  lastPlayerAction = "attack";
   if (totalHeal) { playerState.health = Math.min(playerState.maxHealth, playerState.health + totalHeal); document.querySelector("#battle-message").textContent += ` You restore ${totalHeal} health.`; }
   applyAttackMilestones(hitCount); updateBattleStats();
   if (activeEnemy.control === 0) { finishRestoration(); return; }
   queueEnemyTurn();
 }
 function applyAttackMilestones(hitCount) {
-  if (playerState.wither) { witherAttackCount += hitCount; while (witherAttackCount >= 5) { witherAttackCount -= 5; const witherRate = activeEnemy.kind === "boss" ? 0.05 : 0.15; const damage = Math.round(activeEnemy.controlMax * witherRate); activeEnemy.control = Math.max(0, activeEnemy.control - damage); document.querySelector("#battle-message").textContent += ` Wither removes ${damage} Control.`; } }
-  if (playerState.healOverTime) { healOverTimeAttackCount += hitCount; while (healOverTimeAttackCount >= 10) { healOverTimeAttackCount -= 10; const heal = Math.round((playerState.maxHealth - playerState.health) * 0.2); if (heal > 0) { playerState.health = Math.min(playerState.maxHealth, playerState.health + heal); document.querySelector("#battle-message").textContent += ` Heal Over Time restores ${heal} health.`; } } }
+  if (playerState.wither) { witherAttackCount += hitCount; while (witherAttackCount >= 5) { witherAttackCount -= 5; const witherRate = activeEnemy.kind === "boss" ? 0.05 : 0.15; const damage = Math.round(activeEnemy.controlMax * witherRate); activeEnemy.control = Math.max(0, activeEnemy.control - damage); document.querySelector("#battle-message").textContent += ` Wither removes ${damage} Control.`; if (playerState.upgrades.poison && Math.random() < 0.25) applyPoison(activeEnemy, "Wither"); } }
+  if (playerState.healOverTime) { healOverTimeAttackCount += hitCount; while (healOverTimeAttackCount >= 10) { healOverTimeAttackCount -= 10; const baseHeal = Math.round((playerState.maxHealth - playerState.health) * 0.2); const bonusHeal = playerState.upgrades.healOverTime2 ? healOverTimeBonus + 5 : 0; const healed = Math.min(baseHeal + bonusHeal, playerState.maxHealth - playerState.health); if (healed > 0) { playerState.health += healed; document.querySelector("#battle-message").textContent += ` Heal Over Time restores ${healed} health.`; } if (playerState.upgrades.healOverTime2) healOverTimeBonus += 5; } }
 }
 function currentAttackPower() {
   return playerState.magic ? playerState.restorePower + 1 : playerState.restorePower;
@@ -398,9 +481,24 @@ function defendAction() {
     finishRestoration();
     return;
   }
+  const previousAction = lastPlayerAction;
   battleDefending = true;
+  if (playerState.upgrades.defendPlus && !defendPlusTriggered) {
+    const chance = Math.random() < 0.30;
+    if (chance && previousAction === "attack") {
+      defendPlusTriggered = true;
+      defendPlusBlockNext = true;
+      document.querySelector("#battle-message").textContent = "Defend+ activates! The next enemy attack deals no damage.";
+    } else if (chance && previousAction === "heal") {
+      defendPlusTriggered = true;
+      extraLifeActive = true;
+      if (playerState.upgrades.venom && Math.random() < 0.30) applyPoison(activeEnemy, "Defend+ venom");
+      document.querySelector("#battle-message").textContent = "Defend+ activates! Extra Life will restore you to full health if you fall.";
+    }
+  }
+  lastPlayerAction = "defend";
   playBattleEffect("defend-effect");
-  document.querySelector("#battle-message").textContent = playerState.strongDefend
+  if (!document.querySelector("#battle-message").textContent.startsWith("Defend+")) document.querySelector("#battle-message").textContent = playerState.strongDefend
     ? "A stronger protective light surrounds you. Enemy critical hits are canceled while defending."
     : "A protective light surrounds you. Your next hit is reduced.";
   queueEnemyTurn();
@@ -414,12 +512,14 @@ function healAction() {
 function useHeal() {
   if (currentScreen !== 'battle' || battleBusy || !activeEnemy || bossDefeated(activeEnemy)) return;
   setBattleButtons(true); playBattleEffect("heal-effect");
+  healOverTimeBonus = 0;
   const enemy = activeEnemy;
   const finishHeal = (bonus) => {
     if (currentScreen !== 'battle' || activeEnemy !== enemy || enemy.restored) return;
     const amount = Math.round(playerState.healAmount * (1 + bonus));
     const restored = Math.min(amount, playerState.maxHealth - playerState.health);
     playerState.health += restored;
+    lastPlayerAction = "heal";
     document.querySelector('#battle-message').textContent = restored ? `Warm light restores ${restored} health.` : 'Your health is already full.';
     updateBattleStats();
     queueEnemyTurn();
@@ -429,10 +529,11 @@ function useHeal() {
 }
 function strengthenAction(stat) {
   if (battleBusy || playerState.health <= 1) return;
-  setBattleButtons(true); const sacrifice = Math.ceil(playerState.health / 2); playerState.health = Math.max(1, playerState.health - sacrifice);
-  if (stat === "attack") battleAttackBoost += 0.15; else battleDefenseBoost += 0.15;
+  setBattleButtons(true); const sacrifice = Math.ceil(playerState.health * (playerState.upgrades.strengthen2 ? 0.45 : 0.5)); playerState.health = Math.max(1, playerState.health - sacrifice);
+  if (stat === "attack") battleAttackBoost += playerState.upgrades.strengthen2 ? 0.30 : 0.15; else battleDefenseBoost += playerState.upgrades.strengthen2 ? 0.30 : 0.15;
   strengthenMenuOpen = false; playBattleEffect("defend-effect");
-  document.querySelector("#battle-message").textContent = `Strengthen sacrifices ${sacrifice} health. ${stat === "attack" ? "Attack" : "Defense"} is boosted by 15% for this battle.`;
+  lastPlayerAction = "strengthen";
+  document.querySelector("#battle-message").textContent = `Strengthen sacrifices ${sacrifice} health. ${stat === "attack" ? "Attack" : "Defense"} is boosted by ${playerState.upgrades.strengthen2 ? 30 : 15}% for this battle.`;
   updateBattleStats(); queueEnemyTurn();
 }
 function finishRestoration() {
@@ -494,12 +595,19 @@ function buyUpgrade(type) {
   const upgrade = upgradeDefinitions[type]; if (!upgrade) return;
   if (playerState.upgrades[type]) { document.querySelector("#upgrade-message").textContent = "That path step is already chosen."; return; }
   if (upgrade.requires && !playerState.upgrades[upgrade.requires]) { document.querySelector("#upgrade-message").textContent = "Choose the earlier step on that path first."; return; }
+  if (upgrade.requiresAll && !upgrade.requiresAll.every((id) => playerState.upgrades[id])) { document.querySelector("#upgrade-message").textContent = "Choose all required upgrades first."; return; }
   if (upgrade.requiresAny && !upgrade.requiresAny.some((id) => playerState.upgrades[id])) { document.querySelector("#upgrade-message").textContent = "Choose Greater Defense or Thorns first."; return; }
   if (upgrade.conflictsWith && playerState.upgrades[upgrade.conflictsWith]) { document.querySelector("#upgrade-message").textContent = "That branch is locked because you chose the other path."; return; }
   const choicesUsed = upgrade.choiceGroup ? Object.keys(upgradeDefinitions).filter((id) => upgradeDefinitions[id].choiceGroup === upgrade.choiceGroup && playerState.upgrades[id]).length : 0;
   if (upgrade.choiceGroup && choicesUsed >= upgrade.choiceLimit) { document.querySelector("#upgrade-message").textContent = "You can choose only two upgrades from this branch."; return; }
   if (playerState.divinePoints < upgrade.cost) { document.querySelector("#upgrade-message").textContent = `You need ${upgrade.cost} Divine Points.`; return; }
   playerState.divinePoints -= upgrade.cost; playerState.upgrades[type] = 1;
+  if (upgrade.attackBonus) playerState.restorePower += upgrade.attackBonus;
+  if (upgrade.healthBonus) {
+    playerState.maxHealth += upgrade.healthBonus;
+    playerState.health = Math.min(playerState.maxHealth, playerState.health + upgrade.healthBonus);
+  }
+  if (upgrade.defenseBonus) playerState.defense += upgrade.defenseBonus;
   if (["wither", "strengthen", "healOverTime"].includes(type)) {
     playerState.maxHealth += 3;
     playerState.health = Math.min(playerState.maxHealth, playerState.health + 3);
@@ -522,13 +630,13 @@ function buyUpgrade(type) {
   if (type === "strengthen") { document.querySelector("#upgrade-message").textContent = "Strengthen learned. Health rises by 3; Heal now opens battle boosts."; }
   if (type === "healOverTime") { playerState.healOverTime = true; document.querySelector("#upgrade-message").textContent = "Heal Over Time learned. Health rises by 3."; }
   if (type === "dodge") { playerState.defense += 3; document.querySelector("#upgrade-message").textContent = "Dodge learned: Defense rises by 3; 7% chance to avoid attacks."; }
+  if (upgrade.tier >= 4) document.querySelector("#upgrade-message").textContent = `${type.replace(/[A-Z]/g, letter => ` ${letter.toLowerCase()}`).replace(/^./, letter => letter.toUpperCase())} learned.`;
   updateUpgradeButtons();
   saveProgress();
 }
 function initializeDivineTree() {
   const tree = document.querySelector(".divine-tree");
   const buttons = new Map([...tree.querySelectorAll("[data-upgrade]")].map(button => [button.dataset.upgrade, button]));
-  const base = tree.querySelector(".node-base");
   for (const button of buttons.values()) {
     const positionTooltip = () => {
       const bounds = button.getBoundingClientRect();
@@ -544,30 +652,82 @@ function initializeDivineTree() {
     return node;
   };
   const paths = element("divine-paths");
+  const tierOrder = {
+    damage: {
+      2: ["greaterDamage", "magic"],
+      3: ["critRate", "doubleAttack", "lightSpell2", "soulSpell2"],
+      4: ["flurry", "soulSpell3", "soulBomb"]
+    },
+    health: {
+      2: ["lifeSteal", "greaterHealth"],
+      3: ["wither", "higherHealth", "strengthen", "healOverTime"],
+      4: ["poison", "venom", "strengthen2", "healOverTime2"]
+    },
+    defense: {
+      2: ["greaterDefense", "thorns"],
+      3: ["dodge"],
+      4: ["defendPlus", "reflect"]
+    }
+  };
+  const groups = [];
   for (const path of ["damage", "health", "defense"]) {
     const group = element(`divine-path divine-path-${path}`);
-    const shared = element("upgrade-shared");
-    const branches = element("path-branches");
-    for (const [id, definition] of Object.entries(upgradeDefinitions)) {
-      if (definition.path !== path || definition.tier !== 2) continue;
-      const branch = element("upgrade-branch");
-      branch.dataset.parent = id;
-      const children = element("upgrade-children");
-      for (const [childId, child] of Object.entries(upgradeDefinitions)) {
-        if (child.requires === id) children.append(buttons.get(childId));
-      }
-      branch.append(children, element("upgrade-stem"), buttons.get(id));
-      branches.append(branch);
+    const connectors = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    connectors.classList.add("divine-connectors");
+    connectors.setAttribute("aria-hidden", "true");
+    group.append(connectors);
+    for (const tier of [4, 3, 2, 1]) {
+      const row = element(`divine-tier divine-tier-${tier}`);
+      const ids = tier === 1 ? [path] : tierOrder[path][tier];
+      row.style.gridTemplateColumns = `repeat(${ids.length}, minmax(0, 1fr))`;
+      ids.forEach(id => row.append(buttons.get(id)));
+      group.append(row);
     }
-    for (const [id, definition] of Object.entries(upgradeDefinitions)) {
-      if (definition.path === path && definition.requiresAny) shared.append(buttons.get(id));
-    }
-    group.append(shared, branches, element("upgrade-fork"), buttons.get(path));
+    groups.push(group);
     paths.append(group);
   }
-  const baseRow = element("divine-base");
-  baseRow.append(base);
-  tree.replaceChildren(paths, element("divine-base-stem"), baseRow);
+  tree.replaceChildren(paths);
+  const drawConnectors = () => {
+    for (const group of groups) {
+      const svg = group.querySelector(".divine-connectors");
+      const bounds = group.getBoundingClientRect();
+      svg.replaceChildren();
+      svg.setAttribute("viewBox", `0 0 ${bounds.width} ${bounds.height}`);
+      svg.setAttribute("width", bounds.width);
+      svg.setAttribute("height", bounds.height);
+      const nodes = new Map([...group.querySelectorAll("[data-upgrade]")].map(node => [node.dataset.upgrade, node]));
+      for (const [id, child] of nodes) {
+        const definition = upgradeDefinitions[id];
+        const parents = definition.requiresAll || (definition.requiresAny ? definition.requiresAny : definition.requires ? [definition.requires] : definition.tier === 2 ? [definition.path] : []);
+        for (const parentId of parents) {
+          const parent = nodes.get(parentId);
+          if (!parent) continue;
+          const childRect = child.getBoundingClientRect();
+          const parentRect = parent.getBoundingClientRect();
+          const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+          let x1 = childRect.left + childRect.width / 2;
+          let y1 = childRect.bottom;
+          let x2 = parentRect.left + parentRect.width / 2;
+          let y2 = parentRect.top;
+          if (childRect.top < parentRect.top && childRect.bottom > parentRect.top) {
+            if (childRect.left < parentRect.left) { x1 = childRect.right; x2 = parentRect.left; }
+            else { x1 = childRect.left; x2 = parentRect.right; }
+            y1 = childRect.top + childRect.height / 2;
+            y2 = parentRect.top + parentRect.height / 2;
+          }
+          line.setAttribute("x1", `${x1 - bounds.left}`);
+          line.setAttribute("y1", `${y1 - bounds.top}`);
+          line.setAttribute("x2", `${x2 - bounds.left}`);
+          line.setAttribute("y2", `${y2 - bounds.top}`);
+          line.classList.add("divine-connector-line");
+          svg.append(line);
+        }
+      }
+    }
+  };
+  requestAnimationFrame(drawConnectors);
+  new ResizeObserver(drawConnectors).observe(tree);
+  window.addEventListener("resize", drawConnectors);
 }
 
 function updateUpgradeButtons() {
@@ -576,12 +736,13 @@ function updateUpgradeButtons() {
     const purchased = playerState.upgrades[button.dataset.upgrade] > 0;
     const locked = upgrade?.requires && !playerState.upgrades[upgrade.requires];
     const requiresAnyLocked = upgrade?.requiresAny && !upgrade.requiresAny.some((id) => playerState.upgrades[id]);
+    const requiresAllLocked = upgrade?.requiresAll && !upgrade.requiresAll.every((id) => playerState.upgrades[id]);
     const branchLocked = upgrade?.conflictsWith && playerState.upgrades[upgrade.conflictsWith];
     const choicesUsed = upgrade?.choiceGroup ? Object.keys(upgradeDefinitions).filter((id) => upgradeDefinitions[id].choiceGroup === upgrade.choiceGroup && playerState.upgrades[id]).length : 0;
     const choiceLocked = upgrade?.choiceGroup && choicesUsed >= upgrade.choiceLimit && !purchased;
     button.classList.toggle("purchased", purchased);
-    button.classList.toggle("locked", !!locked || !!requiresAnyLocked || !!branchLocked || !!choiceLocked);
-    button.disabled = purchased || locked || requiresAnyLocked || branchLocked || choiceLocked;
+    button.classList.toggle("locked", !!locked || !!requiresAnyLocked || !!requiresAllLocked || !!branchLocked || !!choiceLocked);
+    button.disabled = purchased || locked || requiresAnyLocked || requiresAllLocked || branchLocked || choiceLocked;
   });
   updateHud();
 }
@@ -623,7 +784,9 @@ function resetGame() {
     greaterDefense: 0,
     thorns: 0,
     critRate: 0, doubleAttack: 0, lightSpell2: 0, soulSpell2: 0, wither: 0,
-    higherHealth: 0, strengthen: 0, healOverTime: 0, dodge: 0
+    higherHealth: 0, strengthen: 0, healOverTime: 0, dodge: 0,
+    flurry: 0, soulSpell3: 0, soulBomb: 0, poison: 0, venom: 0,
+    strengthen2: 0, healOverTime2: 0, defendPlus: 0, reflect: 0
   });
   resetMapState();
   document.querySelector("#attack-action").textContent = "Attack";

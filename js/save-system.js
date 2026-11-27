@@ -40,7 +40,8 @@ function validSave(data) {
     if (typeof data.playerState[key] !== typeof value || !primitive(data.playerState[key])) return false;
     if (typeof value === 'number' && data.playerState[key] < 0) return false;
   }
-  if (!data.playerState.upgrades || !Object.keys(playerState.upgrades).every(key => [0, 1].includes(data.playerState.upgrades[key]))
+  if (!data.playerState.upgrades || Object.keys(data.playerState.upgrades).some(key => !(key in playerState.upgrades))
+    || !Object.keys(playerState.upgrades).every(key => [0, 1].includes(data.playerState.upgrades[key] ?? 0))
     || data.playerState.maxHealth < 1 || data.playerState.health > data.playerState.maxHealth) return false;
   if (!['x', 'y', 'facing'].every(key => Number.isFinite(data.player[key]))
     || !['front', 'back', 'side'].includes(data.player.view)
@@ -201,7 +202,7 @@ function selectSaveSlot(index) {
 }
 
 function restoreSave(data) {
-  Object.assign(playerState, data.playerState, { upgrades: { ...data.playerState.upgrades } });
+  Object.assign(playerState, data.playerState, { upgrades: { ...playerState.upgrades, ...data.playerState.upgrades } });
   for (const [id, state] of Object.entries(data.world)) {
     areas[id].healed = state.healed;
     areas[id].enemies = state.enemies.map(enemy => ({ ...enemy, route: [], routeUntil: 0,

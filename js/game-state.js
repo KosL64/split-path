@@ -65,7 +65,16 @@ const playerState = {
     higherHealth: 0,
     strengthen: 0,
     healOverTime: 0,
-    dodge: 0
+    dodge: 0,
+    flurry: 0,
+    soulSpell3: 0,
+    soulBomb: 0,
+    poison: 0,
+    venom: 0,
+    strengthen2: 0,
+    healOverTime2: 0,
+    defendPlus: 0,
+    reflect: 0
   }
 };
 
@@ -93,8 +102,18 @@ const daggerTestMode = { inspections: 0, enabled: false, starfallUnlocked: false
 let restorationTimer = null;
 const attackTimingDuration = 500;
 let soulSpellUsed = false;
+let soulSpellUsesThisBattle = 0;
 let enemyStunTurns = 0;
 let magicMenuOpen = false;
+let witherAttackCount = 0;
+let healOverTimeAttackCount = 0;
+let healOverTimeBonus = 0;
+let battleAttackBoost = 0;
+let battleDefenseBoost = 0;
+let lastPlayerAction = null;
+let defendPlusTriggered = false;
+let defendPlusBlockNext = false;
+let extraLifeActive = false;
 function rectanglesOverlap(a, b) {
   return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
 }
