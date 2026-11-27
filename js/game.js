@@ -856,6 +856,18 @@ document.querySelectorAll("[data-upgrade]").forEach((button) => {
 window.addEventListener("keydown", (event) => {
   if (document.querySelector('#save-confirm').open || currentScreen === 'saves') return;
   const key = event.key.toLowerCase();
+  if (key === "d" && !event.repeat && currentScreen === "game" && gameMode === "area"
+    && currentAreaId === "pristineCastle" && daggerTestMode.inspections > 0 && nearbyCastleFeature() === "dagger") {
+    event.preventDefault();
+    keys.delete(key);
+    daggerTestMode.inspections = 0;
+    daggerTestMode.enabled = false;
+    daggerTestMode.starfallUnlocked = false;
+    magicMenuOpen = false;
+    updateBattleActions();
+    showTemporaryPrompt("The dagger's hidden power fades.");
+    return;
+  }
   if (["arrowleft", "arrowright", "arrowup", "arrowdown", "a", "s", "d", "w", " "].includes(key)) {
     event.preventDefault();
   }
